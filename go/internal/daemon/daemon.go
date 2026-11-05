@@ -18,6 +18,7 @@ import (
 const (
 	HeartbeatPeriod = 100 * time.Millisecond
 	ExchangeTimeout = 400 * time.Millisecond
+	RPCTimeout      = 3 * time.Second
 	MaxFailures     = 3
 	RetryDelay      = 2 * time.Second
 )
@@ -168,7 +169,9 @@ func (d *Daemon) servePending(t device.Transport) {
 }
 
 func (d *Daemon) runPending(t device.Transport, req pendingRequest) {
-	body, err := t.Exchange(req.pb, ExchangeTimeout)
+	// Control and settings replies can take longer than a heartbeat, especially
+	// while BLE reconfigures OS mode or restarts the keyboard.
+	body, err := t.Exchange(req.pb, RPCTimeout)
 	req.reply <- pendingReply{body: body, err: err}
 }
 
@@ -187,7 +190,7 @@ func (d *Daemon) exchange(pb []byte) ([]byte, error) {
 	select {
 	case r := <-req.reply:
 		return r.body, r.err
-	case <-time.After(3 * ExchangeTimeout):
+	case <-time.After(RPCTimeout + ExchangeTimeout):
 		return nil, errors.New("clvxd: device did not answer")
 	}
 }

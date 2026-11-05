@@ -239,13 +239,17 @@ func DecodeGlobal(pb []byte) (*Global, error) {
 	return g, nil
 }
 
-// Settings is a decoded AppSettings. Global is typed; ProfileRaw keeps the
-// per-profile settings (gestures, touch zones, backlight, F-row) byte-exact
-// so writing global settings back cannot corrupt them.
+// Settings is a decoded AppSettings. Customization fields are additive,
+// read-only views of the working profile. ProfileRaw remains authoritative on
+// writes, preserving unknown fields and the exact bytes supplied by firmware.
 type Settings struct {
-	Global     *Global `json:"global,omitempty"`
-	Counter    *uint32 `json:"counter,omitempty"`
-	ProfileRaw []byte  `json:"-"`
+	Global     *Global            `json:"global,omitempty"`
+	Counter    *uint32            `json:"counter,omitempty"`
+	Gestures   *GestureSettings   `json:"gestures,omitempty"`
+	TouchZone  *TouchZoneSettings `json:"touchZone,omitempty"`
+	Backlight  *BacklightSettings `json:"backlight,omitempty"`
+	Keyboard   *KeyboardSettings  `json:"keyboard,omitempty"`
+	ProfileRaw []byte             `json:"-"`
 	extra      []byte
 }
 
@@ -282,6 +286,15 @@ func DecodeSettings(pb []byte) (*Settings, error) {
 				return nil, err
 			}
 			s.ProfileRaw = append([]byte(nil), raw...)
+			// A newer firmware may add nested fields this decoder does not
+			// understand. Keep the settings read successful and the raw profile
+			// intact even if a typed view cannot be decoded.
+			if p, decodeErr := DecodeProfile(raw); decodeErr == nil {
+				s.Gestures = p.Gestures
+				s.TouchZone = p.TouchZone
+				s.Backlight = p.Backlight
+				s.Keyboard = p.Keyboard
+			}
 		case appCounter:
 			v, err := varintValue(body)
 			if err != nil {
