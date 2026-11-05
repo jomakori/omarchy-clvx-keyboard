@@ -44,25 +44,41 @@ Panel {
   // Profile optimistic local state + coalesced pending writes (set_profile_settings)
   property var localProfile: null
   property var pendingProfile: ({})
+  property string selectedBacklightZone: "keyboard"
+  property var touchModeZones: ({})
+  property var zonePickedColors: ({})
 
   readonly property var sliderBehaviorOptions: [
-    { value: "predefinedShortcut", label: "Def" },
-    { value: "custom", label: "Bright" },
-    { value: "nothing", label: "Off" },
-    { value: "asGlobal", label: "Glob" },
-    { value: "customShortcut", label: "Key" }
+    { value: "keyboardBrightness", label: "Keyboard Brightness", tooltip: "Keyboard Brightness" },
+    { value: "volume",             label: "Volume",              tooltip: "Volume" },
+    { value: "screenBrightness",   label: "Screen Brightness",   tooltip: "Screen Brightness" }
   ]
 
-  readonly property var touchpadEffectOptions: [
-    { value: "solidColor", label: "Solid", tooltip: "Solid" },
-    { value: "breathing", label: "Pulse", tooltip: "Breathing" },
-    { value: "colorCycle", label: "Cycle", tooltip: "Cycle" },
-    { value: "colorWave", label: "Wave", tooltip: "Wave" },
-    { value: "aurora", label: "Aura", tooltip: "Aurora" },
-    { value: "interactiveAnimation", label: "Touch", tooltip: "Interactive" }
+  readonly property var backlightZoneMeta: ({
+    keyboard:    { key: "keyboard",    label: "Keyboard",     sublabel: "Background", hasAurora: true  },
+    touchpad:    { key: "touchpad",    label: "Touchpad",     sublabel: "Touch Area", hasAurora: true  },
+    leftSlider:  { key: "leftSlider",  label: "Left Slider",  sublabel: "Left strip", hasAurora: false },
+    rightSlider: { key: "rightSlider", label: "Right Slider", sublabel: "Right strip", hasAurora: false }
+  })
+
+  readonly property var allBacklightEffectOptions: [
+    { value: "solidColor",           label: "Solid",     tooltip: "Solid" },
+    { value: "breathing",            label: "Breathing", tooltip: "Breathing" },
+    { value: "colorCycle",           label: "Cycle",     tooltip: "Cycle" },
+    { value: "colorWave",            label: "Wave",      tooltip: "Wave" },
+    { value: "aurora",               label: "Aura",      tooltip: "Aurora" },
+    { value: "interactiveAnimation", label: "Touch",     tooltip: "Interactive" }
   ]
 
-  readonly property var touchpadColorPresets: [
+  readonly property var sliderBacklightEffectOptions: [
+    { value: "solidColor",           label: "Solid",     tooltip: "Solid" },
+    { value: "breathing",            label: "Breathing", tooltip: "Breathing" },
+    { value: "colorCycle",           label: "Cycle",     tooltip: "Cycle" },
+    { value: "colorWave",            label: "Wave",      tooltip: "Wave" },
+    { value: "interactiveAnimation", label: "Touch",     tooltip: "Interactive" }
+  ]
+
+  readonly property var backlightColorPresets: [
     { id: "white",   label: "White",   red: 255, green: 255, blue: 255 },
     { id: "red",     label: "Red",     red: 255, green: 0,   blue: 0   },
     { id: "orange",  label: "Orange",  red: 255, green: 102, blue: 0   },
@@ -72,6 +88,22 @@ Panel {
     { id: "blue",    label: "Blue",    red: 0,   green: 0,   blue: 255 },
     { id: "magenta", label: "Magenta", red: 255, green: 0,   blue: 255 }
   ]
+
+  function effectOptionsForZone(zoneKey) {
+    return (zoneKey === "keyboard" || zoneKey === "touchpad")
+      ? root.allBacklightEffectOptions
+      : root.sliderBacklightEffectOptions
+  }
+
+  function effectDisplayLabel(effectVal) {
+    if (effectVal === "solidColor") return "Solid"
+    if (effectVal === "breathing") return "Breathing"
+    if (effectVal === "colorCycle") return "Cycle"
+    if (effectVal === "colorWave") return "Wave"
+    if (effectVal === "aurora") return "Aurora"
+    if (effectVal === "interactiveAnimation") return "Touch"
+    return "Solid"
+  }
 
   onServerProfileChanged: {
     if (!serverProfile) return
@@ -94,7 +126,7 @@ Panel {
         var sideS = k.split(".")[1]
         if (!target.touchZone) target.touchZone = {}
         if (!target.touchZone.slider) target.touchZone.slider = {}
-        if (!target.touchZone.slider[sideS]) target.touchZone.slider[sideS] = { nothing: {} }
+        if (!target.touchZone.slider[sideS]) target.touchZone.slider[sideS] = { custom: 0 }
         target.touchZone.slider[sideS].sensitivity = Math.max(1, Math.min(5, Math.round(Number(v) || 3)))
       } else if (k === "slider.left.behavior" || k === "slider.right.behavior") {
         var sideB = k.split(".")[1]
@@ -119,13 +151,42 @@ Panel {
     }
   }
 
-  function extractZoneColor(zone) {
+  function extractZoneColor(zone, zoneKey) {
     var fallback = { red: 255, green: 255, blue: 255 }
+    if (zoneKey && zonePickedColors && zonePickedColors[zoneKey]) {
+      var picked = zonePickedColors[zoneKey]
+      if (picked && typeof picked === "object" && picked.red !== undefined) {
+        return {
+          red: Math.max(0, Math.min(255, Math.round(Number(picked.red) || 0))),
+          green: Math.max(0, Math.min(255, Math.round(Number(picked.green) || 0))),
+          blue: Math.max(0, Math.min(255, Math.round(Number(picked.blue) || 0)))
+        }
+      }
+    }
     if (!zone || typeof zone !== "object") return fallback
-    var src = (zone.solidColor && zone.solidColor.color) ? zone.solidColor.color
-      : ((zone.breathing && zone.breathing.color) ? zone.breathing.color
-      : ((zone.interactiveAnimation && zone.interactiveAnimation.color) ? zone.interactiveAnimation.color
-      : (zone.color ? zone.color : null)))
+    var preferTouch = !!(zoneKey && touchModeZones && touchModeZones[zoneKey] === true)
+    var src = null
+    if (preferTouch && zone.interactiveAnimation && zone.interactiveAnimation.color) {
+      src = zone.interactiveAnimation.color
+    } else if (zone.solidColor && zone.solidColor.color) {
+      src = zone.solidColor.color
+    } else if (zone.breathing && zone.breathing.color) {
+      src = zone.breathing.color
+    } else if (zone.interactiveAnimation && zone.interactiveAnimation.color) {
+      src = zone.interactiveAnimation.color
+    } else if (zone.colorCycle && zone.colorCycle.colorLinePicker
+               && zone.colorCycle.colorLinePicker.markersArray
+               && zone.colorCycle.colorLinePicker.markersArray.length > 0
+               && zone.colorCycle.colorLinePicker.markersArray[0].color) {
+      src = zone.colorCycle.colorLinePicker.markersArray[0].color
+    } else if (zone.colorWave && zone.colorWave.colorLinePicker
+               && zone.colorWave.colorLinePicker.markersArray
+               && zone.colorWave.colorLinePicker.markersArray.length > 0
+               && zone.colorWave.colorLinePicker.markersArray[0].color) {
+      src = zone.colorWave.colorLinePicker.markersArray[0].color
+    } else if (zone.color) {
+      src = zone.color
+    }
     if (!src || typeof src !== "object") return fallback
     var r = Number(src.red !== undefined ? src.red : 255)
     var g = Number(src.green !== undefined ? src.green : 255)
@@ -143,12 +204,13 @@ Panel {
       var tr = Number(prevZone.transparency)
       if (isFinite(tr)) next.transparency = Math.max(0, Math.min(100, Math.round(tr)))
     }
-    var col = extractZoneColor(prevZone)
+    var col = extractZoneColor(prevZone, zoneKey)
+    var secondCol = { red: 0, green: 128, blue: 255 }
     var defaultPicker = {
       markersNumber: 2,
       markersArray: [
-        { color: { red: 255, green: 0, blue: 0 }, transparency: 0, position: 0 },
-        { color: { red: 0, green: 128, blue: 255 }, transparency: 0, position: 100 }
+        { color: col, transparency: 0, position: 0 },
+        { color: secondCol, transparency: 0, position: 100 }
       ]
     }
     if (variant === "solidColor") {
@@ -172,8 +234,16 @@ Panel {
     } else if (variant === "aurora" && (zoneKey === "keyboard" || zoneKey === "touchpad")) {
       next.aurora = {}
     } else if (variant === "interactiveAnimation") {
+      next.solidColor = (prevZone && prevZone.solidColor && typeof prevZone.solidColor === "object")
+        ? JSON.parse(JSON.stringify(prevZone.solidColor))
+        : { color: col }
+      if (!next.solidColor.color) next.solidColor.color = col
       if (prevZone && prevZone.interactiveAnimation && typeof prevZone.interactiveAnimation === "object") {
         next.interactiveAnimation = JSON.parse(JSON.stringify(prevZone.interactiveAnimation))
+        next.interactiveAnimation.enable = true
+        if (zoneKey === "keyboard" || zoneKey === "touchpad") {
+          next.interactiveAnimation.color = col
+        }
       } else if (zoneKey === "leftSlider" || zoneKey === "rightSlider") {
         next.interactiveAnimation = { enable: true }
       } else if (zoneKey === "touchpad") {
@@ -192,23 +262,39 @@ Panel {
     var g = Math.max(0, Math.min(255, Math.round(Number(colorObj && colorObj.green !== undefined ? colorObj.green : 255))))
     var b = Math.max(0, Math.min(255, Math.round(Number(colorObj && colorObj.blue !== undefined ? colorObj.blue : 255))))
     var col = { red: r, green: g, blue: b }
-    var eff = detectZoneEffect(prevZone, "solidColor")
-    var next = buildBacklightZoneVariant(zoneKey, prevZone, eff)
-    if (next.solidColor) {
-      next.solidColor.color = col
-    } else if (next.breathing) {
-      next.breathing.color = col
-    } else if (next.interactiveAnimation && typeof next.interactiveAnimation === "object") {
-      next.interactiveAnimation.color = col
+    var eff = detectZoneEffect(prevZone, "solidColor", zoneKey)
+    var next = (prevZone && typeof prevZone === "object" && Object.keys(prevZone).length > 0)
+      ? JSON.parse(JSON.stringify(prevZone))
+      : buildBacklightZoneVariant(zoneKey, prevZone, eff)
+    if (eff === "interactiveAnimation") {
+      if (!next.solidColor || typeof next.solidColor !== "object") next.solidColor = { color: col }
+      else next.solidColor.color = JSON.parse(JSON.stringify(col))
+      if (next.interactiveAnimation && typeof next.interactiveAnimation === "object"
+          && (zoneKey === "keyboard" || zoneKey === "touchpad")) {
+        next.interactiveAnimation.color = JSON.parse(JSON.stringify(col))
+      }
+    } else if (next.solidColor && typeof next.solidColor === "object") {
+      next.solidColor.color = JSON.parse(JSON.stringify(col))
+    } else if (next.breathing && typeof next.breathing === "object") {
+      next.breathing.color = JSON.parse(JSON.stringify(col))
+    } else if (next.colorCycle && next.colorCycle.colorLinePicker
+               && next.colorCycle.colorLinePicker.markersArray
+               && next.colorCycle.colorLinePicker.markersArray.length > 0) {
+      next.colorCycle.colorLinePicker.markersArray[0].color = JSON.parse(JSON.stringify(col))
+    } else if (next.colorWave && next.colorWave.colorLinePicker
+               && next.colorWave.colorLinePicker.markersArray
+               && next.colorWave.colorLinePicker.markersArray.length > 0) {
+      next.colorWave.colorLinePicker.markersArray[0].color = JSON.parse(JSON.stringify(col))
     } else {
-      next.color = col
+      next = buildBacklightZoneVariant(zoneKey, prevZone, "solidColor")
+      next.solidColor.color = JSON.parse(JSON.stringify(col))
     }
     return next
   }
 
   function applyBacklightChannel(zoneKey, prevZone, channel, value) {
     var chVal = Math.max(0, Math.min(255, Math.round(Number(value) || 0)))
-    var eff = detectZoneEffect(prevZone, "solidColor")
+    var eff = detectZoneEffect(prevZone, "solidColor", zoneKey)
     var next = buildBacklightZoneVariant(zoneKey, prevZone, eff)
     if (next.solidColor) {
       if (!next.solidColor.color) next.solidColor.color = { red: 255, green: 255, blue: 255 }
@@ -220,7 +306,11 @@ Panel {
     return next
   }
 
-  function detectZoneEffect(zone, fallback) {
+  function detectZoneEffect(zone, fallback, zoneKey) {
+    if (zoneKey && touchModeZones && touchModeZones[zoneKey] === true
+        && zone && zone.interactiveAnimation !== undefined && zone.interactiveAnimation !== null) {
+      return "interactiveAnimation"
+    }
     if (zone && typeof zone === "object") {
       if (zone.solidColor !== undefined && zone.solidColor !== null) return "solidColor"
       if (zone.breathing !== undefined && zone.breathing !== null) return "breathing"
@@ -237,7 +327,7 @@ Panel {
     if (pendingProfile && pendingProfile[k] !== undefined) return String(pendingProfile[k])
     var p = workingProfile()
     var z = (p && p.backlight) ? p.backlight[zoneKey] : null
-    return detectZoneEffect(z, fallback)
+    return detectZoneEffect(z, fallback, zoneKey)
   }
 
   function backlightZoneChannel(zoneKey, channel, fallback) {
@@ -249,34 +339,41 @@ Panel {
     if (pendingProfile && pendingProfile[k] !== undefined) return Math.max(0, Math.min(255, Math.round(Number(pendingProfile[k]) || 0)))
     var p = workingProfile()
     var z = (p && p.backlight) ? p.backlight[zoneKey] : null
-    var col = extractZoneColor(z)
+    var col = extractZoneColor(z, zoneKey)
     return col[channel] !== undefined ? col[channel] : fallback
   }
 
   function buildSliderVariant(prevSlider, variant) {
-    var next = {}
     var sens = Number(prevSlider && prevSlider.sensitivity !== undefined ? prevSlider.sensitivity : 3)
-    next.sensitivity = (isFinite(sens) && sens >= 1 && sens <= 5) ? Math.round(sens) : 3
-    var fallbackCombo = { key1: { type: 0, code: 0 } }
-    if (variant === "customShortcut") {
-      var cs = (prevSlider && prevSlider.customShortcut && typeof prevSlider.customShortcut === "object")
-        ? JSON.parse(JSON.stringify(prevSlider.customShortcut))
-        : { inc: fallbackCombo, dec: fallbackCombo }
-      next.customShortcut = cs
-    } else if (variant === "predefinedShortcut") {
-      var ps = (prevSlider && prevSlider.predefinedShortcut && typeof prevSlider.predefinedShortcut === "object")
-        ? JSON.parse(JSON.stringify(prevSlider.predefinedShortcut))
-        : { inc: fallbackCombo, dec: fallbackCombo }
-      next.predefinedShortcut = ps
-    } else if (variant === "custom") {
-      var cVal = Number(prevSlider && prevSlider.custom !== undefined ? prevSlider.custom : 0)
-      next.custom = isFinite(cVal) ? Math.max(0, Math.round(cVal)) : 0
-    } else if (variant === "asGlobal") {
-      next.asGlobal = {}
-    } else {
-      next.nothing = {}
+    var cleanSens = (isFinite(sens) && sens >= 1 && sens <= 5) ? Math.round(sens) : 3
+    if (variant === "keyboardBrightness" || variant === "Keyboard Brightness" || variant === "custom") {
+      return {
+        sensitivity: cleanSens,
+        custom: 0
+      }
     }
-    return next
+    if (variant === "volume" || variant === "Volume") {
+      return {
+        sensitivity: cleanSens,
+        predefinedShortcut: {
+          inc: { key1: { type: 1, code: 233 } },
+          dec: { key1: { type: 1, code: 234 } }
+        }
+      }
+    }
+    if (variant === "screenBrightness" || variant === "Screen Brightness") {
+      return {
+        sensitivity: cleanSens,
+        predefinedShortcut: {
+          inc: { key1: { type: 1, code: 111 } },
+          dec: { key1: { type: 1, code: 112 } }
+        }
+      }
+    }
+    return {
+      sensitivity: cleanSens,
+      custom: 0
+    }
   }
 
   function sliderSensitivity(side, fallback) {
@@ -291,23 +388,51 @@ Panel {
     return fallback
   }
 
+  function matchesShortcutCodes(shortcutObj, incCode, decCode) {
+    if (!shortcutObj || typeof shortcutObj !== "object") return false
+    var incKey = (shortcutObj.inc && shortcutObj.inc.key1) ? shortcutObj.inc.key1 : null
+    var decKey = (shortcutObj.dec && shortcutObj.dec.key1) ? shortcutObj.dec.key1 : null
+    if (!incKey || !decKey) return false
+    return Number(incKey.type) === 1
+      && Number(incKey.code) === incCode
+      && Number(decKey.type) === 1
+      && Number(decKey.code) === decCode
+  }
+
   function sliderBehavior(side, fallback) {
     var k = "slider." + side + ".behavior"
     if (pendingProfile && pendingProfile[k] !== undefined) return String(pendingProfile[k])
     var p = workingProfile()
     var s = (p && p.touchZone && p.touchZone.slider) ? p.touchZone.slider[side] : null
     if (s && typeof s === "object") {
-      if (s.customShortcut !== undefined && s.customShortcut !== null) return "customShortcut"
-      if (s.predefinedShortcut !== undefined && s.predefinedShortcut !== null) return "predefinedShortcut"
-      if (s.custom !== undefined && s.custom !== null) return "custom"
-      if (s.nothing !== undefined && s.nothing !== null) return "nothing"
-      if (s.asGlobal !== undefined && s.asGlobal !== null) return "asGlobal"
+      if (s.custom !== undefined && s.custom !== null && Number(s.custom) === 0) return "keyboardBrightness"
+      if (matchesShortcutCodes(s.predefinedShortcut, 233, 234)) return "volume"
+      if (matchesShortcutCodes(s.predefinedShortcut, 111, 112)) return "screenBrightness"
     }
     return fallback
   }
 
   function setProfileField(key, value) {
     if (!profileControlsEnabled) return
+    if (key.indexOf("backlight.") === 0) {
+      var parts = key.split(".")
+      var zKey = parts[1]
+      var prop = parts[2]
+      if (prop === "effect") {
+        var nextTouch = Object.assign({}, touchModeZones)
+        nextTouch[zKey] = (String(value) === "interactiveAnimation")
+        touchModeZones = nextTouch
+      } else if (prop === "color" && value && typeof value === "object") {
+        var nextColors = Object.assign({}, zonePickedColors)
+        nextColors[zKey] = {
+          red: Number(value.red !== undefined ? value.red : 255),
+          green: Number(value.green !== undefined ? value.green : 255),
+          blue: Number(value.blue !== undefined ? value.blue : 255)
+        }
+        zonePickedColors = nextColors
+      }
+    }
+
     var nextPending = Object.assign({}, pendingProfile)
     nextPending[key] = value
     pendingProfile = nextPending
@@ -327,10 +452,36 @@ Panel {
     if (!service || typeof service.resetProfileField !== "function") return
     var nextPending = Object.assign({}, pendingProfile)
     delete nextPending[path]
-    if (path === "backlight.touchpad.color") {
-      delete nextPending["backlight.touchpad.red"]
-      delete nextPending["backlight.touchpad.green"]
-      delete nextPending["backlight.touchpad.blue"]
+    if (path === "slider.left" || path === "slider.right"
+        || path === "touchZone.slider.left" || path === "touchZone.slider.right") {
+      var side = path.split(".").pop()
+      delete nextPending["slider." + side]
+      delete nextPending["slider." + side + ".sensitivity"]
+      delete nextPending["slider." + side + ".behavior"]
+      delete nextPending["touchZone.slider." + side]
+    } else if (path.indexOf("backlight.") === 0) {
+      var blParts = path.split(".")
+      var zKey = blParts[1]
+      if (blParts.length === 2) {
+        delete nextPending["backlight." + zKey + ".effect"]
+        delete nextPending["backlight." + zKey + ".color"]
+        delete nextPending["backlight." + zKey + ".red"]
+        delete nextPending["backlight." + zKey + ".green"]
+        delete nextPending["backlight." + zKey + ".blue"]
+        var nextTouch = Object.assign({}, touchModeZones)
+        delete nextTouch[zKey]
+        touchModeZones = nextTouch
+        var nextColors = Object.assign({}, zonePickedColors)
+        delete nextColors[zKey]
+        zonePickedColors = nextColors
+      } else if (blParts[2] === "color") {
+        delete nextPending["backlight." + zKey + ".red"]
+        delete nextPending["backlight." + zKey + ".green"]
+        delete nextPending["backlight." + zKey + ".blue"]
+        var nextCols = Object.assign({}, zonePickedColors)
+        delete nextCols[zKey]
+        zonePickedColors = nextCols
+      }
     }
     pendingProfile = nextPending
     service.resetProfileField(path)
@@ -344,6 +495,7 @@ Panel {
   }
 
   function flushProfile() {
+    profileWriteTimer.stop()
     var keys = Object.keys(pendingProfile)
     if (keys.length === 0) return
     if (!service || typeof service.setProfileSettings !== "function") return
@@ -458,17 +610,29 @@ Panel {
     fontSize: Style.font.caption
 
     function tightenChips() {
+      var buttons = []
       for (var i = 0; i < cbg.children.length; i++) {
         var child = cbg.children[i]
         if (child && child.horizontalPadding !== undefined) {
           child.horizontalPadding = cbg.chipPaddingX
           child.verticalPadding = cbg.chipPaddingY
+          child.fontSize = cbg.fontSize
+          buttons.push(child)
+        }
+      }
+      if (cbg.width > 0 && buttons.length > 0 && cbg.implicitWidth > cbg.width) {
+        var shrunkFont = Math.max(8, cbg.fontSize - 1)
+        var shrunkPadX = Math.max(Style.space(2), cbg.chipPaddingX - Style.space(1))
+        for (var j = 0; j < buttons.length; j++) {
+          buttons[j].fontSize = shrunkFont
+          buttons[j].horizontalPadding = shrunkPadX
         }
       }
     }
 
     Component.onCompleted: tightenChips()
     onOptionsChanged: Qt.callLater(tightenChips)
+    onWidthChanged: Qt.callLater(tightenChips)
     onChipPaddingXChanged: tightenChips()
     onChipPaddingYChanged: tightenChips()
   }
@@ -478,159 +642,264 @@ Panel {
     property string side: "left"
     property string title: "Left slider"
     readonly property int sensValue: root.sliderSensitivity(side, 3)
-    readonly property string behaviorValue: root.sliderBehavior(side, "nothing")
-    readonly property bool isShortcutVariant: behaviorValue === "customShortcut" || behaviorValue === "predefinedShortcut"
-    width: parent ? parent.width : implicitWidth
-    spacing: Style.space(3)
-    enabled: root.profileControlsEnabled
-    opacity: enabled ? 1.0 : 0.5
-
-    Row {
-      width: parent.width
-      spacing: Style.space(6)
-
-      Text {
-        width: parent.width - sensLabel.implicitWidth - parent.spacing
-        textFormat: Text.PlainText
-        text: szc.title + " sensitivity"
-        color: root.fg
-        font.family: root.fontFam
-        font.pixelSize: Style.font.bodySmall
-        elide: Text.ElideRight
-      }
-
-      Text {
-        id: sensLabel
-        textFormat: Text.PlainText
-        text: String(szc.sensValue)
-        color: root.dim
-        font.family: root.fontFam
-        font.pixelSize: Style.font.caption
-      }
-    }
-
-    Item {
-      width: parent.width
-      implicitHeight: Math.max(sensSlider.implicitHeight, sensResetBtn.implicitHeight)
-
-      PanelSlider {
-        id: sensSlider
-        anchors.left: parent.left
-        anchors.right: sensResetBtn.left
-        anchors.rightMargin: Style.space(6)
-        anchors.verticalCenter: parent.verticalCenter
-        implicitHeight: Style.space(18)
-        knobSize: Math.max(12, Math.round(Style.spacing.controlHeight * 0.32))
-        bar: root.bar
-        minimum: 1
-        maximum: 5
-        step: 1
-        integer: true
-        tickCount: 5
-        value: szc.sensValue
-        onReleased: function(v) {
-          if (!szc.enabled) return
-          root.setProfileField("slider." + szc.side + ".sensitivity", Math.round(v))
-        }
-      }
-
-      ResetButton {
-        id: sensResetBtn
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        resetPath: "slider." + szc.side + ".sensitivity"
-        resetLabel: "Reset " + szc.title.toLowerCase() + " sensitivity"
-      }
-    }
-
-    Text {
-      width: parent.width
-      textFormat: Text.PlainText
-      text: szc.title + " behavior"
-      color: root.dim
-      font.family: root.fontFam
-      font.pixelSize: Style.font.caption
-      font.bold: true
-      elide: Text.ElideRight
-    }
-
-    Item {
-      width: parent.width
-      implicitHeight: Math.max(behGroup.implicitHeight, behResetBtn.implicitHeight)
-
-      CompactButtonGroup {
-        id: behGroup
-        anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
-        chipPaddingX: Style.space(5)
-        options: root.sliderBehaviorOptions
-        value: szc.behaviorValue
-        onChanged: function(v) {
-          if (!szc.enabled) return
-          root.setProfileField("slider." + szc.side + ".behavior", v)
-        }
-      }
-
-      ResetButton {
-        id: behResetBtn
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        resetPath: "slider." + szc.side + ".behavior"
-        resetLabel: "Reset " + szc.title.toLowerCase() + " behavior"
-      }
-    }
-
-    SectionNote {
-      visible: szc.isShortcutVariant
-      text: "Shortcut capture lands later."
-    }
-  }
-
-  component TouchpadLightControl: Column {
-    id: tplc
-    readonly property string effectValue: root.backlightZoneEffect("touchpad", "solidColor")
-    readonly property int redValue: root.backlightZoneChannel("touchpad", "red", 255)
-    readonly property int greenValue: root.backlightZoneChannel("touchpad", "green", 255)
-    readonly property int blueValue: root.backlightZoneChannel("touchpad", "blue", 255)
+    readonly property string behaviorValue: root.sliderBehavior(side, "")
     width: parent ? parent.width : implicitWidth
     spacing: Style.space(4)
     enabled: root.profileControlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
-    Text {
-      width: parent.width
-      textFormat: Text.PlainText
-      text: "Effect"
-      color: root.dim
-      font.family: root.fontFam
-      font.pixelSize: Style.font.caption
-      font.bold: true
-      elide: Text.ElideRight
-    }
-
     Item {
       width: parent.width
-      implicitHeight: Math.max(tpEffectGroup.implicitHeight, tpEffectResetBtn.implicitHeight)
+      implicitHeight: Math.max(sliderTitleText.implicitHeight, sliderResetBtn.implicitHeight)
 
-      CompactButtonGroup {
-        id: tpEffectGroup
+      Text {
+        id: sliderTitleText
         anchors.left: parent.left
+        anchors.right: sensMetaText.left
+        anchors.rightMargin: Style.space(6)
         anchors.verticalCenter: parent.verticalCenter
-        chipPaddingX: Style.space(4)
-        options: root.touchpadEffectOptions
-        value: tplc.effectValue
-        onChanged: function(v) {
-          if (!tplc.enabled) return
-          root.setProfileField("backlight.touchpad.effect", v)
-        }
+        textFormat: Text.PlainText
+        text: szc.title
+        color: root.fg
+        font.family: root.fontFam
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+        elide: Text.ElideRight
+      }
+
+      Text {
+        id: sensMetaText
+        anchors.right: sliderResetBtn.left
+        anchors.rightMargin: Style.space(6)
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "Sens " + String(sensSlider.dragging ? Math.round(sensSlider.liveValue) : szc.sensValue)
+        color: root.dim
+        font.family: root.fontFam
+        font.pixelSize: Style.font.caption
       }
 
       ResetButton {
-        id: tpEffectResetBtn
+        id: sliderResetBtn
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        resetPath: "backlight.touchpad.effect"
-        resetLabel: "Reset touchpad effect"
+        resetPath: "slider." + szc.side
+        resetLabel: "Reset " + szc.title.toLowerCase()
+      }
+    }
+
+    PanelSlider {
+      id: sensSlider
+      width: parent.width
+      implicitHeight: Style.space(18)
+      knobSize: Math.max(12, Math.round(Style.spacing.controlHeight * 0.32))
+      bar: root.bar
+      minimum: 1
+      maximum: 5
+      step: 1
+      integer: true
+      tickCount: 5
+      value: szc.sensValue
+      onMoved: function(v) {
+        if (!szc.enabled) return
+        var sv = Math.round(v)
+        if (sv === szc.sensValue) return
+        root.setProfileField("slider." + szc.side + ".sensitivity", sv)
+      }
+      onReleased: function(v) {
+        if (!szc.enabled) return
+        var sv = Math.round(v)
+        if (sv !== szc.sensValue) {
+          root.setProfileField("slider." + szc.side + ".sensitivity", sv)
+        }
+        root.flushProfile()
+      }
+    }
+
+    CompactButtonGroup {
+      id: behGroup
+      width: parent.width
+      chipPaddingX: Style.space(4)
+      options: root.sliderBehaviorOptions
+      value: szc.behaviorValue
+      onChanged: function(v) {
+        if (!szc.enabled) return
+        root.setProfileField("slider." + szc.side + ".behavior", v)
+        root.flushProfile()
+      }
+    }
+  }
+
+  component ZoneMapBlock: BorderSurface {
+    id: zmb
+    property string zoneKey: "keyboard"
+    property string labelText: "Keyboard"
+    property string subText: ""
+    readonly property bool isSelected: root.selectedBacklightZone === zoneKey
+    readonly property bool isHot: blockMouse.containsMouse
+    readonly property color zoneDotColor: Qt.rgba(
+      root.backlightZoneChannel(zoneKey, "red", 255) / 255,
+      root.backlightZoneChannel(zoneKey, "green", 255) / 255,
+      root.backlightZoneChannel(zoneKey, "blue", 255) / 255,
+      1.0
+    )
+
+    radius: Style.cornerRadius
+    color: isSelected
+      ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, Style.selectedFillAlpha)
+      : (isHot
+          ? Style.hoverFillFor(root.fg, root.accentColor)
+          : Style.normalFillFor(root.fg, root.accentColor))
+    borderSpec: isSelected
+      ? Border.flat(root.accentColor, Math.max(1, Style.space(2)))
+      : (isHot
+          ? Border.flat(Style.hoverBorderFor(root.fg, root.accentColor), Math.max(1, Style.normalBorderWidth))
+          : Border.flat(Style.normalBorderFor(root.fg, root.accentColor), Math.max(1, Style.normalBorderWidth)))
+
+    Behavior on color { ColorAnimation { duration: 110 } }
+
+    Row {
+      anchors.centerIn: parent
+      spacing: Style.space(5)
+
+      Rectangle {
+        width: Style.space(7)
+        height: Style.space(7)
+        radius: width / 2
+        anchors.verticalCenter: parent.verticalCenter
+        color: zmb.zoneDotColor
+        border.width: 1
+        border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.28)
+      }
+
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: zmb.labelText
+        color: zmb.isSelected ? root.accentColor : root.fg
+        font.family: root.fontFam
+        font.pixelSize: Style.font.caption
+        font.bold: zmb.isSelected
+      }
+
+      Text {
+        visible: zmb.subText !== ""
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "· " + zmb.subText
+        color: zmb.isSelected ? root.accentColor : root.dim
+        font.family: root.fontFam
+        font.pixelSize: Style.font.caption
+        opacity: zmb.isSelected ? 0.9 : 0.75
+      }
+    }
+
+    MouseArea {
+      id: blockMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: {
+        root.selectedBacklightZone = zmb.zoneKey
+      }
+    }
+  }
+
+  component BacklightZoneControl: Column {
+    id: bzc
+    readonly property string zoneKey: root.selectedBacklightZone
+    readonly property var zoneMeta: root.backlightZoneMeta[zoneKey] || root.backlightZoneMeta.keyboard
+    readonly property string effectValue: root.backlightZoneEffect(zoneKey, "solidColor")
+    readonly property int redValue: root.backlightZoneChannel(zoneKey, "red", 255)
+    readonly property int greenValue: root.backlightZoneChannel(zoneKey, "green", 255)
+    readonly property int blueValue: root.backlightZoneChannel(zoneKey, "blue", 255)
+    readonly property color activeColor: Qt.rgba(redValue / 255, greenValue / 255, blueValue / 255, 1.0)
+    readonly property bool isColorDotEffect: effectValue === "solidColor" || effectValue === "breathing"
+
+    width: parent ? parent.width : implicitWidth
+    spacing: Style.space(6)
+    enabled: root.profileControlsEnabled
+    opacity: enabled ? 1.0 : 0.5
+
+    // Hardware zone map: wide keyboard block, touchpad block, two thin slider strips
+    BorderSurface {
+      width: parent.width
+      implicitHeight: mapColumn.implicitHeight + Style.space(10)
+      padding: Style.space(5)
+      radius: Style.cornerRadius
+      color: Style.normalFillFor(root.fg, root.accentColor)
+      borderSpec: Border.flat(Style.normalBorderFor(root.fg, root.accentColor), Math.max(1, Style.normalBorderWidth))
+
+      Column {
+        id: mapColumn
+        x: Style.space(5)
+        y: Style.space(5)
+        width: parent.width - Style.space(10)
+        spacing: Style.space(4)
+
+        ZoneMapBlock {
+          width: parent.width
+          height: Style.space(26)
+          zoneKey: "keyboard"
+          labelText: "Keyboard"
+          subText: "Background"
+        }
+
+        ZoneMapBlock {
+          width: parent.width
+          height: Style.space(24)
+          zoneKey: "touchpad"
+          labelText: "Touchpad"
+          subText: "Touch Area"
+        }
+
+        Row {
+          width: parent.width
+          spacing: Style.space(4)
+
+          ZoneMapBlock {
+            width: Math.floor((parent.width - parent.spacing) / 2)
+            height: Style.space(20)
+            zoneKey: "leftSlider"
+            labelText: "Left Slider"
+          }
+
+          ZoneMapBlock {
+            width: parent.width - Math.floor((parent.width - parent.spacing) / 2) - parent.spacing
+            height: Style.space(20)
+            zoneKey: "rightSlider"
+            labelText: "Right Slider"
+          }
+        }
+      }
+    }
+
+    // Selected zone header + per-zone factory subtree reset
+    Item {
+      width: parent.width
+      implicitHeight: Math.max(zoneHeaderLabel.implicitHeight, zoneResetBtn.implicitHeight)
+
+      Text {
+        id: zoneHeaderLabel
+        anchors.left: parent.left
+        anchors.right: zoneResetBtn.left
+        anchors.rightMargin: Style.space(6)
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: bzc.zoneMeta.label + " · " + bzc.zoneMeta.sublabel
+        color: root.fg
+        font.family: root.fontFam
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+        elide: Text.ElideRight
+      }
+
+      ResetButton {
+        id: zoneResetBtn
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        resetPath: "backlight." + bzc.zoneKey
+        resetLabel: "Reset " + bzc.zoneMeta.label.toLowerCase() + " zone"
       }
     }
 
@@ -645,88 +914,160 @@ Panel {
       elide: Text.ElideRight
     }
 
-    Item {
+    Row {
+      id: swatchRow
       width: parent.width
-      implicitHeight: Math.max(swatchRow.implicitHeight, tpColorResetBtn.implicitHeight)
+      spacing: Style.space(6)
 
-      Row {
-        id: swatchRow
-        anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(6)
+      Repeater {
+        model: root.backlightColorPresets
+        delegate: Item {
+          required property var modelData
+          readonly property bool isSelected: bzc.redValue === modelData.red
+            && bzc.greenValue === modelData.green
+            && bzc.blueValue === modelData.blue
+          readonly property color swatchColor: Qt.rgba(
+            modelData.red / 255,
+            modelData.green / 255,
+            modelData.blue / 255,
+            1.0
+          )
+          width: Style.space(22)
+          height: Style.space(22)
 
-        Repeater {
-          model: root.touchpadColorPresets
-          delegate: Item {
-            required property var modelData
-            readonly property bool isSelected: tplc.redValue === modelData.red
-              && tplc.greenValue === modelData.green
-              && tplc.blueValue === modelData.blue
-            readonly property color swatchColor: Qt.rgba(
-              modelData.red / 255,
-              modelData.green / 255,
-              modelData.blue / 255,
-              1.0
-            )
-            width: Style.space(22)
-            height: Style.space(22)
+          Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: "transparent"
+            border.width: parent.isSelected
+              ? Math.max(2, Style.space(2))
+              : (swatchMouse.containsMouse ? Math.max(1, Style.space(1)) : 0)
+            border.color: parent.isSelected ? root.accentColor : root.dim
 
             Rectangle {
-              anchors.fill: parent
+              anchors.centerIn: parent
+              width: parent.parent.isSelected ? parent.width - Style.space(6) : parent.width - Style.space(4)
+              height: width
               radius: width / 2
-              color: "transparent"
-              border.width: parent.isSelected
-                ? Math.max(2, Style.space(2))
-                : (swatchMouse.containsMouse ? Math.max(1, Style.space(1)) : 0)
-              border.color: parent.isSelected ? root.fg : root.dim
+              color: parent.parent.swatchColor
+              border.width: 1
+              border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
+              scale: swatchMouse.containsMouse && bzc.enabled ? 1.12 : 1.0
 
-              Rectangle {
-                anchors.centerIn: parent
-                width: parent.parent.isSelected ? parent.width - Style.space(6) : parent.width - Style.space(4)
-                height: width
-                radius: width / 2
-                color: parent.parent.swatchColor
-                border.width: 1
-                border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
-                scale: swatchMouse.containsMouse && tplc.enabled ? 1.12 : 1.0
-
-                Behavior on scale {
-                  NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
-                }
+              Behavior on scale {
+                NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
               }
             }
+          }
 
-            MouseArea {
-              id: swatchMouse
-              anchors.fill: parent
-              hoverEnabled: true
-              enabled: tplc.enabled
-              cursorShape: tplc.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-              onClicked: {
-                if (!tplc.enabled) return
-                root.setProfileField("backlight.touchpad.color", {
-                  red: modelData.red,
-                  green: modelData.green,
-                  blue: modelData.blue
-                })
-              }
+          MouseArea {
+            id: swatchMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            enabled: bzc.enabled
+            cursorShape: bzc.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: {
+              if (!bzc.enabled) return
+              root.setProfileField("backlight." + bzc.zoneKey + ".color", {
+                red: modelData.red,
+                green: modelData.green,
+                blue: modelData.blue
+              })
+              root.flushProfile()
             }
+          }
 
-            PanelToolTip {
-              visible: swatchMouse.containsMouse
-              text: modelData.label
-              fontFamily: root.fontFam
-            }
+          PanelToolTip {
+            visible: swatchMouse.containsMouse
+            text: modelData.label
+            fontFamily: root.fontFam
           }
         }
       }
+    }
 
-      ResetButton {
-        id: tpColorResetBtn
+    // Effect header + live indicator ("Live on keyboard")
+    Item {
+      width: parent.width
+      implicitHeight: Math.max(effectHeaderText.implicitHeight, liveIndicatorRow.implicitHeight)
+
+      Text {
+        id: effectHeaderText
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "Effect"
+        color: root.dim
+        font.family: root.fontFam
+        font.pixelSize: Style.font.caption
+        font.bold: true
+      }
+
+      Row {
+        id: liveIndicatorRow
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        resetPath: "backlight.touchpad.color"
-        resetLabel: "Reset touchpad color"
+        spacing: Style.space(5)
+
+        Rectangle {
+          id: livePreviewDot
+          visible: bzc.isColorDotEffect
+          width: Style.space(8)
+          height: Style.space(8)
+          radius: width / 2
+          anchors.verticalCenter: parent.verticalCenter
+          color: bzc.activeColor
+          border.width: 1
+          border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.3)
+          opacity: 1.0
+
+          NumberAnimation on opacity {
+            running: bzc.effectValue === "breathing"
+            from: 0.2
+            to: 1.0
+            duration: 900
+            loops: Animation.Infinite
+            easing.type: Easing.InOutSine
+          }
+
+          Binding on opacity {
+            when: bzc.effectValue !== "breathing"
+            value: 1.0
+          }
+        }
+
+        Text {
+          visible: !bzc.isColorDotEffect
+          anchors.verticalCenter: parent.verticalCenter
+          textFormat: Text.PlainText
+          text: root.effectDisplayLabel(bzc.effectValue)
+          color: root.accentColor
+          font.family: root.fontFam
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          textFormat: Text.PlainText
+          text: "Live on keyboard"
+          color: root.dim
+          font.family: root.fontFam
+          font.pixelSize: Style.font.caption
+        }
+      }
+    }
+
+    CompactButtonGroup {
+      id: zoneEffectGroup
+      width: parent.width
+      chipPaddingX: Style.space(4)
+      options: root.effectOptionsForZone(bzc.zoneKey)
+      value: bzc.effectValue
+      onChanged: function(v) {
+        if (!bzc.enabled) return
+        root.setProfileField("backlight." + bzc.zoneKey + ".effect", v)
+        root.flushProfile()
       }
     }
   }
@@ -790,7 +1131,7 @@ Panel {
 
           Column {
             width: parent.width
-            spacing: Style.space(4)
+            spacing: Style.space(6)
 
             PanelSectionHeader {
               text: "Sliders"
@@ -818,10 +1159,10 @@ Panel {
 
           Column {
             width: parent.width
-            spacing: Style.space(4)
+            spacing: Style.space(6)
 
             PanelSectionHeader {
-              text: "Touchpad"
+              text: "Backlight"
               foreground: root.fg
               fontFamily: root.fontFam
             }
@@ -831,7 +1172,7 @@ Panel {
               text: "Loading…"
             }
 
-            TouchpadLightControl {}
+            BacklightZoneControl {}
           }
         }
       }

@@ -67,6 +67,14 @@ Item {
     state.lastError = status.error === undefined || status.error === null ? "" : String(status.error)
   }
 
+  function hasQueuedMethod(method) {
+    var queue = state.pendingQueue || []
+    for (var i = 0; i < queue.length; i++) {
+      if (queue[i] && queue[i].method === method) return true
+    }
+    return false
+  }
+
   function handleLine(line, sourceMethod) {
     var text = String(line || "").trim()
     if (text === "") return false
@@ -100,15 +108,19 @@ Item {
       }
       if (method === "get_settings" || method === "set_global"
           || "global" in message.result || "settings" in message.result) {
-        state.settings = message.result
+        if (!hasQueuedMethod("set_global")) {
+          state.settings = message.result
+        }
         return true
       }
       if (method === "get_profile_settings" || method === "set_profile_settings"
           || ("id" in message.result && "raw" in message.result)
           || (!("global" in message.result) && !("fwVersion" in message.result) && !("kbmInfo" in message.result)
               && ("touchZone" in message.result || "keyboard" in message.result || "fKey" in message.result || "backlight" in message.result))) {
-        state.profile = message.result
         if (message.result.raw !== undefined) state.profileRaw = message.result.raw
+        if (!hasQueuedMethod("set_profile_settings")) {
+          state.profile = message.result
+        }
         return true
       }
       return true
@@ -450,7 +462,14 @@ Item {
 
     var nextProfile = JSON.parse(JSON.stringify(state.profile))
 
-    if (normPath === "touchZone.slider.left.sensitivity" || normPath === "touchZone.slider.right.sensitivity") {
+    if (normPath === "touchZone.slider.left" || normPath === "touchZone.slider.right") {
+      var sliderSide = normPath.split(".")[2]
+      var defSlider = (defProf.touchZone && defProf.touchZone.slider) ? defProf.touchZone.slider[sliderSide] : null
+      if (!defSlider || typeof defSlider !== "object") return false
+      if (!nextProfile.touchZone) nextProfile.touchZone = {}
+      if (!nextProfile.touchZone.slider) nextProfile.touchZone.slider = {}
+      nextProfile.touchZone.slider[sliderSide] = JSON.parse(JSON.stringify(defSlider))
+    } else if (normPath === "touchZone.slider.left.sensitivity" || normPath === "touchZone.slider.right.sensitivity") {
       var sensSide = normPath.split(".")[2]
       var defSensSlider = (defProf.touchZone && defProf.touchZone.slider) ? defProf.touchZone.slider[sensSide] : null
       if (!defSensSlider || typeof defSensSlider !== "object") return false
@@ -464,41 +483,41 @@ Item {
       if (!defBehSlider || typeof defBehSlider !== "object") return false
       if (!nextProfile.touchZone) nextProfile.touchZone = {}
       if (!nextProfile.touchZone.slider) nextProfile.touchZone.slider = {}
-      var prevSlider = nextProfile.touchZone.slider[behSide]
-      var keepSens = (prevSlider && prevSlider.sensitivity !== undefined) ? prevSlider.sensitivity : undefined
-      var restoredSlider = JSON.parse(JSON.stringify(defBehSlider))
-      if (keepSens !== undefined) restoredSlider.sensitivity = keepSens
-      nextProfile.touchZone.slider[behSide] = restoredSlider
-    } else if (normPath === "backlight.touchpad.effect") {
-      var defTpZone = (defProf.backlight && defProf.backlight.touchpad) ? defProf.backlight.touchpad : null
-      if (!defTpZone || typeof defTpZone !== "object") return false
+      nextProfile.touchZone.slider[behSide] = JSON.parse(JSON.stringify(defBehSlider))
+    } else if (normPath.indexOf("backlight.") === 0 && normPath.split(".").length === 3) {
+      var blParts = normPath.split(".")
+      var blZoneKey = blParts[1]
+      var blProp = blParts[2]
+      var defBlZone = (defProf.backlight && defProf.backlight[blZoneKey]) ? defProf.backlight[blZoneKey] : null
+      if (!defBlZone || typeof defBlZone !== "object") return false
       if (!nextProfile.backlight) nextProfile.backlight = {}
-      var prevTpZone = nextProfile.backlight.touchpad
-      var hadPrevColor = prevTpZone && ((prevTpZone.solidColor && prevTpZone.solidColor.color) || (prevTpZone.breathing && prevTpZone.breathing.color))
-      var prevCol = hadPrevColor ? extractDefaultZoneColor(prevTpZone) : null
-      var restoredTp = JSON.parse(JSON.stringify(defTpZone))
-      if (prevCol) {
-        if (restoredTp.solidColor) restoredTp.solidColor.color = prevCol
-        else if (restoredTp.breathing) restoredTp.breathing.color = prevCol
-      }
-      nextProfile.backlight.touchpad = restoredTp
-    } else if (normPath === "backlight.touchpad.color") {
-      var defColorZone = (defProf.backlight && defProf.backlight.touchpad) ? defProf.backlight.touchpad : null
-      if (!defColorZone || typeof defColorZone !== "object") return false
-      var defCol = extractDefaultZoneColor(defColorZone)
-      if (!nextProfile.backlight) nextProfile.backlight = {}
-      if (!nextProfile.backlight.touchpad || typeof nextProfile.backlight.touchpad !== "object") {
-        nextProfile.backlight.touchpad = JSON.parse(JSON.stringify(defColorZone))
-      }
-      var curTp = nextProfile.backlight.touchpad
-      if (curTp.solidColor && typeof curTp.solidColor === "object") {
-        curTp.solidColor.color = JSON.parse(JSON.stringify(defCol))
-      } else if (curTp.breathing && typeof curTp.breathing === "object") {
-        curTp.breathing.color = JSON.parse(JSON.stringify(defCol))
-      } else if (curTp.interactiveAnimation && typeof curTp.interactiveAnimation === "object") {
-        curTp.interactiveAnimation.color = JSON.parse(JSON.stringify(defCol))
+      if (blProp === "effect") {
+        var prevBlZone = nextProfile.backlight[blZoneKey]
+        var hadPrevColor = prevBlZone && ((prevBlZone.solidColor && prevBlZone.solidColor.color) || (prevBlZone.breathing && prevBlZone.breathing.color))
+        var prevCol = hadPrevColor ? extractDefaultZoneColor(prevBlZone) : null
+        var restoredBl = JSON.parse(JSON.stringify(defBlZone))
+        if (prevCol) {
+          if (restoredBl.solidColor) restoredBl.solidColor.color = prevCol
+          else if (restoredBl.breathing) restoredBl.breathing.color = prevCol
+        }
+        nextProfile.backlight[blZoneKey] = restoredBl
+      } else if (blProp === "color") {
+        var defCol = extractDefaultZoneColor(defBlZone)
+        if (!nextProfile.backlight[blZoneKey] || typeof nextProfile.backlight[blZoneKey] !== "object") {
+          nextProfile.backlight[blZoneKey] = JSON.parse(JSON.stringify(defBlZone))
+        }
+        var curBl = nextProfile.backlight[blZoneKey]
+        if (curBl.solidColor && typeof curBl.solidColor === "object") {
+          curBl.solidColor.color = JSON.parse(JSON.stringify(defCol))
+        } else if (curBl.breathing && typeof curBl.breathing === "object") {
+          curBl.breathing.color = JSON.parse(JSON.stringify(defCol))
+        } else if (curBl.interactiveAnimation && typeof curBl.interactiveAnimation === "object") {
+          curBl.interactiveAnimation.color = JSON.parse(JSON.stringify(defCol))
+        } else {
+          curBl.color = JSON.parse(JSON.stringify(defCol))
+        }
       } else {
-        curTp.color = JSON.parse(JSON.stringify(defCol))
+        return false
       }
     } else {
       var parts = normPath.split(".")
