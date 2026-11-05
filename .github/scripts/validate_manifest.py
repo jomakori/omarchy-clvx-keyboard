@@ -22,7 +22,7 @@ for key in ("schemaVersion", "id", "name", "version", "kinds", "entryPoints"):
 if not re.fullmatch(r"\d+\.\d+\.\d+", str(manifest.get("version", ""))):
     err(f"version is not strict semver X.Y.Z: {manifest.get('version')!r}")
 
-if not re.fullmatch(r"[a-z0-9]+(\.[a-z0-9]+)+", str(manifest.get("id", ""))):
+if not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", str(manifest.get("id", ""))):
     err(f"id is not reverse-DNS: {manifest.get('id')!r}")
 
 valid_kinds = {"bar-widget", "panel", "overlay", "menu", "service", "bar"}
