@@ -13,6 +13,7 @@ type BacklightSettings struct {
 	RightSlider *SliderBacklight   `json:"rightSlider,omitempty"`
 }
 
+// BacklightZoneEffects contains the effects shared by every backlight zone.
 type BacklightZoneEffects struct {
 	SolidColor   *SolidColor `json:"solidColor,omitempty"`
 	Breathing    *Breathing  `json:"breathing,omitempty"`
@@ -21,6 +22,7 @@ type BacklightZoneEffects struct {
 	Transparency *uint32     `json:"transparency,omitempty"`
 }
 
+// KeyboardBacklight contains the keyboard zone's lighting settings.
 type KeyboardBacklight struct {
 	RawBytes
 	BacklightZoneEffects
@@ -28,6 +30,7 @@ type KeyboardBacklight struct {
 	Aurora               *EmptyAction          `json:"aurora,omitempty"`
 }
 
+// TouchpadBacklight contains the touchpad zone's lighting settings.
 type TouchpadBacklight struct {
 	RawBytes
 	BacklightZoneEffects
@@ -35,17 +38,20 @@ type TouchpadBacklight struct {
 	Aurora               *EmptyAction                  `json:"aurora,omitempty"`
 }
 
+// SliderBacklight contains one slider zone's lighting settings.
 type SliderBacklight struct {
 	RawBytes
 	BacklightZoneEffects
 	InteractiveAnimation *SliderInteractiveAnimation `json:"interactiveAnimation,omitempty"`
 }
 
+// SolidColor is a static-color lighting effect.
 type SolidColor struct {
 	RawBytes
 	Color *Color `json:"color,omitempty"`
 }
 
+// Color is an RGB color with optional components.
 type Color struct {
 	RawBytes
 	Red   *uint32 `json:"red,omitempty"`
@@ -53,18 +59,21 @@ type Color struct {
 	Blue  *uint32 `json:"blue,omitempty"`
 }
 
+// Breathing is a periodic fading-color lighting effect.
 type Breathing struct {
 	RawBytes
 	Color  *Color  `json:"color,omitempty"`
 	Period *uint32 `json:"period,omitempty"`
 }
 
+// ColorCycle cycles through a configurable line of colors.
 type ColorCycle struct {
 	RawBytes
 	ColorLinePicker *ColorLinePicker `json:"colorLinePicker,omitempty"`
 	Period          *uint32          `json:"period,omitempty"`
 }
 
+// ColorWave animates a configurable line of colors in a direction.
 type ColorWave struct {
 	RawBytes
 	ColorLinePicker *ColorLinePicker `json:"colorLinePicker,omitempty"`
@@ -73,12 +82,14 @@ type ColorWave struct {
 	Length          *uint32          `json:"length,omitempty"`
 }
 
+// ColorLinePicker describes the markers used by cycle and wave effects.
 type ColorLinePicker struct {
 	RawBytes
 	MarkersNumber uint32    `json:"markersNumber"`
 	MarkersArray  []*Marker `json:"markersArray,omitempty"`
 }
 
+// Marker is a positioned color in a color line.
 type Marker struct {
 	RawBytes
 	Color        *Color  `json:"color,omitempty"`
@@ -86,6 +97,7 @@ type Marker struct {
 	Position     *uint32 `json:"position,omitempty"`
 }
 
+// InteractiveAnimation configures the keyboard's touch-reactive lighting.
 type InteractiveAnimation struct {
 	RawBytes
 	Color    *Color  `json:"color,omitempty"`
@@ -93,6 +105,7 @@ type InteractiveAnimation struct {
 	Duration *uint32 `json:"duration,omitempty"`
 }
 
+// TouchpadInteractiveAnimation configures the touchpad's touch-reactive lighting.
 type TouchpadInteractiveAnimation struct {
 	RawBytes
 	Color  *Color  `json:"color,omitempty"`
@@ -100,11 +113,13 @@ type TouchpadInteractiveAnimation struct {
 	Trace  *uint32 `json:"trace,omitempty"`
 }
 
+// SliderInteractiveAnimation configures a slider's touch-reactive lighting.
 type SliderInteractiveAnimation struct {
 	RawBytes
 	Enable *bool `json:"enable,omitempty"`
 }
 
+// DecodeBacklight parses backlight settings while preserving the original bytes.
 func DecodeBacklight(pb []byte) (*BacklightSettings, error) {
 	b := &BacklightSettings{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
@@ -113,13 +128,29 @@ func DecodeBacklight(pb []byte) (*BacklightSettings, error) {
 		}
 		switch num {
 		case 1:
-			return decodeChild(body, func(pb []byte) (err error) { b.Keyboard, err = decodeKeyboardBacklight(pb); return })
+			return decodeChild(body, func(pb []byte) error {
+				var err error
+				b.Keyboard, err = decodeKeyboardBacklight(pb)
+				return err
+			})
 		case 2:
-			return decodeChild(body, func(pb []byte) (err error) { b.Touchpad, err = decodeTouchpadBacklight(pb); return })
+			return decodeChild(body, func(pb []byte) error {
+				var err error
+				b.Touchpad, err = decodeTouchpadBacklight(pb)
+				return err
+			})
 		case 3:
-			return decodeChild(body, func(pb []byte) (err error) { b.LeftSlider, err = decodeSliderBacklight(pb); return })
+			return decodeChild(body, func(pb []byte) error {
+				var err error
+				b.LeftSlider, err = decodeSliderBacklight(pb)
+				return err
+			})
 		case 4:
-			return decodeChild(body, func(pb []byte) (err error) { b.RightSlider, err = decodeSliderBacklight(pb); return })
+			return decodeChild(body, func(pb []byte) error {
+				var err error
+				b.RightSlider, err = decodeSliderBacklight(pb)
+				return err
+			})
 		}
 		return nil
 	})
@@ -133,19 +164,35 @@ func decodeZoneEffects(pb []byte, effects *BacklightZoneEffects, special func(pr
 		switch num {
 		case 1:
 			if typ == protowire.BytesType {
-				return decodeChild(body, func(b []byte) (err error) { effects.SolidColor, err = decodeSolidColor(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					effects.SolidColor, err = decodeSolidColor(b)
+					return err
+				})
 			}
 		case 4:
 			if typ == protowire.BytesType {
-				return decodeChild(body, func(b []byte) (err error) { effects.Breathing, err = decodeBreathing(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					effects.Breathing, err = decodeBreathing(b)
+					return err
+				})
 			}
 		case 5:
 			if typ == protowire.BytesType {
-				return decodeChild(body, func(b []byte) (err error) { effects.ColorCycle, err = decodeColorCycle(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					effects.ColorCycle, err = decodeColorCycle(b)
+					return err
+				})
 			}
 		case 6:
 			if typ == protowire.BytesType {
-				return decodeChild(body, func(b []byte) (err error) { effects.ColorWave, err = decodeColorWave(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					effects.ColorWave, err = decodeColorWave(b)
+					return err
+				})
 			}
 		case 7:
 			if typ == protowire.VarintType {
@@ -164,7 +211,11 @@ func decodeKeyboardBacklight(pb []byte) (*KeyboardBacklight, error) {
 	k := &KeyboardBacklight{RawBytes: rawBytes(pb)}
 	err := decodeZoneEffects(pb, &k.BacklightZoneEffects, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 2 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { k.InteractiveAnimation, err = decodeInteractiveAnimation(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				k.InteractiveAnimation, err = decodeInteractiveAnimation(b)
+				return err
+			})
 		}
 		if num == 8 && typ == protowire.BytesType {
 			e, err := decodeEmpty(body)
@@ -180,7 +231,11 @@ func decodeTouchpadBacklight(pb []byte) (*TouchpadBacklight, error) {
 	t := &TouchpadBacklight{RawBytes: rawBytes(pb)}
 	err := decodeZoneEffects(pb, &t.BacklightZoneEffects, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 2 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { t.InteractiveAnimation, err = decodeTouchpadInteractive(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				t.InteractiveAnimation, err = decodeTouchpadInteractive(b)
+				return err
+			})
 		}
 		if num == 8 && typ == protowire.BytesType {
 			e, err := decodeEmpty(body)
@@ -196,7 +251,11 @@ func decodeSliderBacklight(pb []byte) (*SliderBacklight, error) {
 	s := &SliderBacklight{RawBytes: rawBytes(pb)}
 	err := decodeZoneEffects(pb, &s.BacklightZoneEffects, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 2 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { s.InteractiveAnimation, err = decodeSliderInteractive(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				s.InteractiveAnimation, err = decodeSliderInteractive(b)
+				return err
+			})
 		}
 		return nil
 	})
@@ -207,13 +266,18 @@ func decodeSolidColor(pb []byte) (*SolidColor, error) {
 	s := &SolidColor{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 1 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { s.Color, err = DecodeColor(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				s.Color, err = DecodeColor(b)
+				return err
+			})
 		}
 		return nil
 	})
 	return s, err
 }
 
+// DecodeColor parses an RGB color while preserving the original bytes.
 func DecodeColor(pb []byte) (*Color, error) {
 	c := &Color{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
@@ -241,7 +305,11 @@ func decodeBreathing(pb []byte) (*Breathing, error) {
 	b := &Breathing{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 1 && typ == protowire.BytesType {
-			return decodeChild(body, func(pb []byte) (err error) { b.Color, err = DecodeColor(pb); return })
+			return decodeChild(body, func(pb []byte) error {
+				var err error
+				b.Color, err = DecodeColor(pb)
+				return err
+			})
 		}
 		if num == 2 && typ == protowire.VarintType {
 			if v, ok := fieldVarint(body); ok {
@@ -257,7 +325,11 @@ func decodeColorCycle(pb []byte) (*ColorCycle, error) {
 	c := &ColorCycle{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 1 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { c.ColorLinePicker, err = decodeColorLinePicker(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				c.ColorLinePicker, err = decodeColorLinePicker(b)
+				return err
+			})
 		}
 		if num == 2 && typ == protowire.VarintType {
 			if v, ok := fieldVarint(body); ok {
@@ -273,7 +345,11 @@ func decodeColorWave(pb []byte) (*ColorWave, error) {
 	c := &ColorWave{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 1 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { c.ColorLinePicker, err = decodeColorLinePicker(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				c.ColorLinePicker, err = decodeColorLinePicker(b)
+				return err
+			})
 		}
 		if typ == protowire.VarintType {
 			v, ok := fieldVarint(body)
@@ -318,7 +394,11 @@ func decodeMarker(pb []byte) (*Marker, error) {
 	m := &Marker{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 1 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { m.Color, err = DecodeColor(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				m.Color, err = DecodeColor(b)
+				return err
+			})
 		}
 		if typ == protowire.VarintType {
 			v, ok := fieldVarint(body)
@@ -340,7 +420,11 @@ func decodeInteractiveAnimation(pb []byte) (*InteractiveAnimation, error) {
 	a := &InteractiveAnimation{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 2 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { a.Color, err = DecodeColor(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				a.Color, err = DecodeColor(b)
+				return err
+			})
 		}
 		if typ == protowire.VarintType {
 			v, ok := fieldVarint(body)
@@ -362,7 +446,11 @@ func decodeTouchpadInteractive(pb []byte) (*TouchpadInteractiveAnimation, error)
 	a := &TouchpadInteractiveAnimation{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 2 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { a.Color, err = DecodeColor(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				a.Color, err = DecodeColor(b)
+				return err
+			})
 		}
 		if typ == protowire.VarintType {
 			v, ok := fieldVarint(body)

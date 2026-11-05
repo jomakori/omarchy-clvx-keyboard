@@ -21,6 +21,7 @@ type Heartbeat struct {
 	PowerMode        uint64
 }
 
+// DecodeHeartbeat parses a heartbeat response body.
 func DecodeHeartbeat(body []byte) (Heartbeat, error) {
 	var h Heartbeat
 	fs, err := Fields(body)

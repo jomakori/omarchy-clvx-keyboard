@@ -29,15 +29,11 @@ func (d *Daemon) call(name string, pb []byte) (cproto.Response, error) {
 }
 
 func emptyRequest(reqType uint32) ([]byte, error) {
-	pb, err := cproto.EncodeEmptyRequest(reqType)
-	if err != nil {
-		return nil, err
-	}
-	return pb, nil
+	return cproto.EncodeEmptyRequest(reqType)
 }
 
-// GetProfileSettings reads the sole supported working profile (id 0).
-func (d *Daemon) GetProfileSettings() (*cproto.ProfileSettings, error) {
+// ProfileSettings reads the sole supported working profile (id 0).
+func (d *Daemon) ProfileSettings() (*cproto.ProfileSettings, error) {
 	resp, err := d.call("GET_PROFILE_SETTINGS", cproto.EncodeGetProfileSettings(0))
 	if err != nil {
 		return nil, err
@@ -77,10 +73,11 @@ func (d *Daemon) SetProfileSettings(profile *cproto.ProfileSettings) (*cproto.Pr
 	if status != cproto.SetProfileStatusOK {
 		return applied, fmt.Errorf("clvxd: SET_PROFILE_SETTINGS status %d", status)
 	}
-	return d.GetProfileSettings()
+	return d.ProfileSettings()
 }
 
-func (d *Daemon) GetDeviceInfo() (*cproto.DeviceInfo, error) {
+// DeviceInfo reads identity and firmware information from the keyboard.
+func (d *Daemon) DeviceInfo() (*cproto.DeviceInfo, error) {
 	pb, err := emptyRequest(cproto.ReqGetDeviceInfo)
 	if err != nil {
 		return nil, err
@@ -92,8 +89,8 @@ func (d *Daemon) GetDeviceInfo() (*cproto.DeviceInfo, error) {
 	return cproto.ParseDeviceInfoResponse(resp)
 }
 
-// GetDefaultSettings is read-only: it never applies the returned settings.
-func (d *Daemon) GetDefaultSettings() (*cproto.Settings, error) {
+// DefaultSettings reads the defaults without applying them.
+func (d *Daemon) DefaultSettings() (*cproto.Settings, error) {
 	pb, err := emptyRequest(cproto.ReqGetDefaultSettings)
 	if err != nil {
 		return nil, err
@@ -115,6 +112,7 @@ func (d *Daemon) GetDefaultSettings() (*cproto.Settings, error) {
 	return settings, nil
 }
 
+// SetOSMode selects the keyboard's host OS behavior mode.
 func (d *Daemon) SetOSMode(mode cproto.OSMode) (*OperationStatus, error) {
 	pb, err := cproto.EncodeSetOSMode(mode)
 	if err != nil {
@@ -134,10 +132,12 @@ func (d *Daemon) SetOSMode(mode cproto.OSMode) (*OperationStatus, error) {
 	return &OperationStatus{Status: status}, nil
 }
 
+// PerformRestart asks the keyboard to restart.
 func (d *Daemon) PerformRestart() (*OperationStatus, error) {
 	return d.performStatusRequest(cproto.ReqPerformRestart, "PERFORM_RESTART", 14)
 }
 
+// PerformFullReset asks the keyboard to restore its factory settings.
 func (d *Daemon) PerformFullReset() (*OperationStatus, error) {
 	return d.performStatusRequest(cproto.ReqPerformFullReset, "PERFORM_FULL_RESET", 12)
 }
@@ -161,7 +161,8 @@ func (d *Daemon) performStatusRequest(reqType uint32, name string, responseField
 	return &OperationStatus{Status: status}, nil
 }
 
-func (d *Daemon) GetStatistics() (*cproto.Statistics, error) {
+// Statistics reads the keyboard's cumulative usage counters.
+func (d *Daemon) Statistics() (*cproto.Statistics, error) {
 	pb, err := emptyRequest(cproto.ReqGetStatistics)
 	if err != nil {
 		return nil, err
@@ -173,9 +174,9 @@ func (d *Daemon) GetStatistics() (*cproto.Statistics, error) {
 	return cproto.ParseStatisticsResponse(resp)
 }
 
-// GetDiagnostics is deliberately best-effort. Firmware that rejects this
-// optional RPC produces an empty JSON object without affecting other methods.
-func (d *Daemon) GetDiagnostics() *cproto.MiscDiagnostics {
+// Diagnostics is deliberately best-effort. Firmware that rejects this optional
+// RPC produces an empty JSON object without affecting other methods.
+func (d *Daemon) Diagnostics() *cproto.MiscDiagnostics {
 	pb, err := emptyRequest(cproto.ReqGetDiagnostics)
 	if err != nil {
 		return &cproto.MiscDiagnostics{}

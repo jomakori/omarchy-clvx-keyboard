@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -19,13 +20,14 @@ func SocketPath() string {
 	return filepath.Join(os.TempDir(), "clvx-"+os.Getenv("USER")+".sock")
 }
 
-// Request/Response are newline-delimited JSON on the Unix socket.
+// Request is a newline-delimited JSON request received on the Unix socket.
 type Request struct {
 	ID     int             `json:"id"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params,omitempty"`
 }
 
+// Response is a newline-delimited JSON reply sent on the Unix socket.
 type Response struct {
 	ID     int    `json:"id"`
 	Result any    `json:"result,omitempty"`
@@ -35,16 +37,16 @@ type Response struct {
 // Serve accepts clients until ctx is cancelled.
 func Serve(ctx context.Context, d *Daemon, path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
+		return fmt.Errorf("clvxd: create socket directory: %w", err)
 	}
 	_ = os.Remove(path)
 	ln, err := net.Listen("unix", path)
 	if err != nil {
-		return err
+		return fmt.Errorf("clvxd: listen on %s: %w", path, err)
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		ln.Close()
-		return err
+		return fmt.Errorf("clvxd: set socket permissions: %w", err)
 	}
 	go func() { <-ctx.Done(); ln.Close(); os.Remove(path) }()
 	for {
@@ -53,7 +55,7 @@ func Serve(ctx context.Context, d *Daemon, path string) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			return err
+			return fmt.Errorf("clvxd: accept socket connection: %w", err)
 		}
 		go handle(ctx, d, conn)
 	}
@@ -73,7 +75,7 @@ func handle(ctx context.Context, d *Daemon, conn net.Conn) {
 		case "status":
 			_ = enc.Encode(Response{ID: req.ID, Result: d.Snapshot()})
 		case "get_settings":
-			settings, err := d.GetSettings()
+			settings, err := d.Settings()
 			if err != nil {
 				_ = enc.Encode(Response{ID: req.ID, Error: err.Error()})
 				continue
@@ -111,7 +113,7 @@ func handle(ctx context.Context, d *Daemon, conn net.Conn) {
 				_ = enc.Encode(Response{ID: req.ID, Error: "only profile id 0 is supported"})
 				continue
 			}
-			profile, err := d.GetProfileSettings()
+			profile, err := d.ProfileSettings()
 			if err != nil {
 				_ = enc.Encode(Response{ID: req.ID, Error: err.Error()})
 				continue
@@ -136,14 +138,14 @@ func handle(ctx context.Context, d *Daemon, conn net.Conn) {
 			}
 			_ = enc.Encode(Response{ID: req.ID, Result: profile})
 		case "device_info":
-			info, err := d.GetDeviceInfo()
+			info, err := d.DeviceInfo()
 			if err != nil {
 				_ = enc.Encode(Response{ID: req.ID, Error: err.Error()})
 				continue
 			}
 			_ = enc.Encode(Response{ID: req.ID, Result: info})
 		case "default_settings":
-			settings, err := d.GetDefaultSettings()
+			settings, err := d.DefaultSettings()
 			if err != nil {
 				_ = enc.Encode(Response{ID: req.ID, Error: err.Error()})
 				continue
@@ -199,14 +201,14 @@ func handle(ctx context.Context, d *Daemon, conn net.Conn) {
 			}
 			_ = enc.Encode(Response{ID: req.ID, Result: status})
 		case "statistics":
-			statistics, err := d.GetStatistics()
+			statistics, err := d.Statistics()
 			if err != nil {
 				_ = enc.Encode(Response{ID: req.ID, Error: err.Error()})
 				continue
 			}
 			_ = enc.Encode(Response{ID: req.ID, Result: statistics})
 		case "diagnostics":
-			_ = enc.Encode(Response{ID: req.ID, Result: d.GetDiagnostics()})
+			_ = enc.Encode(Response{ID: req.ID, Result: d.Diagnostics()})
 		case "subscribe":
 			ch, cancel := d.Subscribe()
 			_ = enc.Encode(Response{ID: req.ID, Result: d.Snapshot()})

@@ -15,6 +15,7 @@ import (
 	cproto "clvx/internal/proto"
 )
 
+// Daemon timing and retry limits.
 const (
 	HeartbeatPeriod = 100 * time.Millisecond
 	ExchangeTimeout = 400 * time.Millisecond
@@ -36,6 +37,7 @@ type Status struct {
 	Error         string    `json:"error,omitempty"`
 }
 
+// Daemon owns the keyboard transport and serializes requests with heartbeats.
 type Daemon struct {
 	mode string
 
@@ -58,6 +60,7 @@ type pendingReply struct {
 	err  error
 }
 
+// New creates a daemon that connects using transportMode.
 func New(transportMode string) *Daemon {
 	return &Daemon{
 		mode:     transportMode,
@@ -195,8 +198,8 @@ func (d *Daemon) exchange(pb []byte) ([]byte, error) {
 	}
 }
 
-// GetSettings reads AppSettings from the keyboard.
-func (d *Daemon) GetSettings() (*cproto.Settings, error) {
+// Settings reads AppSettings from the keyboard.
+func (d *Daemon) Settings() (*cproto.Settings, error) {
 	reply, err := d.exchange(cproto.EncodeGetSettings())
 	if err != nil {
 		return nil, err
@@ -222,7 +225,7 @@ func (d *Daemon) GetSettings() (*cproto.Settings, error) {
 // the patch is merged over them, and the full AppSettings (including the
 // untouched per-profile bytes) is written back.
 func (d *Daemon) SetGlobal(patch *cproto.Global) (*cproto.Settings, error) {
-	current, err := d.GetSettings()
+	current, err := d.Settings()
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +254,7 @@ func (d *Daemon) SetGlobal(patch *cproto.Global) (*cproto.Settings, error) {
 	}
 	// A successful write only carries the status, so read back what the
 	// keyboard actually stored (it may normalise ranges).
-	return d.GetSettings()
+	return d.Settings()
 }
 
 func (d *Daemon) handleReply(reply []byte) error {

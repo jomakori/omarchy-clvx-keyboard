@@ -11,6 +11,9 @@ import (
 // OSMode is the keyboard's host OS behavior mode.
 type OSMode uint32
 
+var _ json.Marshaler = OSMode(0)
+
+// Host OS behavior modes reported by the keyboard.
 const (
 	OSWindows OSMode = iota
 	OSMac
@@ -27,6 +30,7 @@ var osModeNames = map[OSMode]string{
 	OSAppleTV: "APPLE_TV", OSUnknown: "UNKNOWN_OS", OSAppleVision: "APPLE_VISION", OSIOS: "IOS",
 }
 
+// String returns the protocol name for m, or UNRECOGNIZED for an unknown value.
 func (m OSMode) String() string {
 	if name, ok := osModeNames[m]; ok {
 		return name
@@ -34,8 +38,10 @@ func (m OSMode) String() string {
 	return "UNRECOGNIZED"
 }
 
+// MarshalJSON encodes m as its protocol name.
 func (m OSMode) MarshalJSON() ([]byte, error) { return json.Marshal(m.String()) }
 
+// ParseOSMode parses a protocol OS name, defaulting an empty name to Linux.
 func ParseOSMode(name string) (OSMode, error) {
 	if name == "" {
 		return OSLinux, nil
@@ -49,6 +55,7 @@ func ParseOSMode(name string) (OSMode, error) {
 	return 0, fmt.Errorf("proto: invalid OS mode %q", name)
 }
 
+// EncodeSetOSMode builds a request to select the keyboard's host OS mode.
 func EncodeSetOSMode(mode OSMode) ([]byte, error) {
 	if _, ok := osModeNames[mode]; !ok {
 		return nil, fmt.Errorf("proto: invalid OS mode %d", mode)
@@ -81,12 +88,14 @@ type DeviceInfo struct {
 	Common          *uint32     `json:"common,omitempty"`
 }
 
+// DeviceMode contains the host OS and input behavior modes.
 type DeviceMode struct {
 	RawBytes
 	OSMode    *OSMode `json:"osMode,omitempty"`
 	InputMode *string `json:"inputMode,omitempty"`
 }
 
+// KBMInfo contains keyboard-module identity and sensor information.
 type KBMInfo struct {
 	RawBytes
 	Keyboard    *KBMKeyboardInfo `json:"keyboard,omitempty"`
@@ -97,6 +106,7 @@ type KBMInfo struct {
 	Type        *string          `json:"type,omitempty"`
 }
 
+// KBMKeyboardInfo describes the keyboard module's layout and localization.
 type KBMKeyboardInfo struct {
 	RawBytes
 	TypeLegacy *string `json:"typeLegacy,omitempty"`
@@ -107,12 +117,14 @@ type KBMKeyboardInfo struct {
 	OS         *string `json:"os,omitempty"`
 }
 
+// KBMSensorInfo identifies a keyboard-module sensor and its firmware version.
 type KBMSensorInfo struct {
 	RawBytes
 	Type    *uint32 `json:"type,omitempty"`
 	Version *uint32 `json:"version,omitempty"`
 }
 
+// KBMTouchICInfo identifies the touch controller and its firmware.
 type KBMTouchICInfo struct {
 	RawBytes
 	Chip      *uint32 `json:"chip,omitempty"`
@@ -129,6 +141,7 @@ var kbmStandardNames = map[uint64]string{0: "STANDARD_UNDEFINED", 1: "ANSI", 2: 
 var kbmLanguageNames = map[uint64]string{0: "LANGUAGE_UNDEFINED", 1: "US", 2: "FR", 3: "DE", 4: "UK", 5: "JP"}
 var kbmOSNames = map[uint64]string{0: "OS_UNDEFINED", 1: "WINDOWS", 2: "MAC", 3: "LINUX"}
 
+// DecodeDeviceInfo parses device information while preserving unknown fields.
 func DecodeDeviceInfo(pb []byte) (*DeviceInfo, error) {
 	d := &DeviceInfo{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
@@ -189,6 +202,7 @@ func DecodeDeviceInfo(pb []byte) (*DeviceInfo, error) {
 	return d, err
 }
 
+// ParseDeviceInfoResponse validates and decodes a device-info response.
 func ParseDeviceInfoResponse(r Response) (*DeviceInfo, error) {
 	if r.Field != 5 {
 		return nil, fmt.Errorf("proto: response field %d is not device info", r.Field)
@@ -196,7 +210,11 @@ func ParseDeviceInfoResponse(r Response) (*DeviceInfo, error) {
 	var info *DeviceInfo
 	err := walkFields(r.Body, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 1 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { info, err = DecodeDeviceInfo(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				info, err = DecodeDeviceInfo(b)
+				return err
+			})
 		}
 		return nil
 	})
@@ -236,7 +254,11 @@ func decodeKBMInfo(pb []byte) (*KBMInfo, error) {
 		if typ == protowire.BytesType {
 			switch num {
 			case 1:
-				return decodeChild(body, func(b []byte) (err error) { k.Keyboard, err = decodeKBMKeyboard(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					k.Keyboard, err = decodeKBMKeyboard(b)
+					return err
+				})
 			case 2, 4:
 				return decodeChild(body, func(b []byte) error {
 					v, err := decodeKBMSensor(b)
@@ -248,7 +270,11 @@ func decodeKBMInfo(pb []byte) (*KBMInfo, error) {
 					return err
 				})
 			case 3:
-				return decodeChild(body, func(b []byte) (err error) { k.TouchIC, err = decodeKBMTouchIC(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					k.TouchIC, err = decodeKBMTouchIC(b)
+					return err
+				})
 			}
 		}
 		if typ == protowire.VarintType {

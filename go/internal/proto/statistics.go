@@ -16,11 +16,13 @@ type Statistics struct {
 	TypeTouchOnly *TypeTouchStatistics `json:"typeTouchOnly,omitempty"`
 }
 
+// KeyboardStatistics contains cumulative keyboard usage counters.
 type KeyboardStatistics struct {
 	RawBytes
 	KeyPressedCounter uint32 `json:"keyPressedCounter"`
 }
 
+// GestureStatistics contains cumulative gesture usage counters.
 type GestureStatistics struct {
 	RawBytes
 	Tap1fCount   uint32 `json:"tap1fCount"`
@@ -36,12 +38,14 @@ type GestureStatistics struct {
 	HoldCount    uint32 `json:"holdCount"`
 }
 
+// SliderStatistics contains cumulative left and right slider counters.
 type SliderStatistics struct {
 	RawBytes
 	LeftSliderCount  uint32 `json:"lsliderCount"`
 	RightSliderCount uint32 `json:"rsliderCount"`
 }
 
+// ChannelStatistics contains usage counters for each wireless or USB channel.
 type ChannelStatistics struct {
 	RawBytes
 	USB *ChannelStatistic `json:"usb,omitempty"`
@@ -50,24 +54,28 @@ type ChannelStatistics struct {
 	BT3 *ChannelStatistic `json:"bt3,omitempty"`
 }
 
+// ChannelStatistic contains the time a channel spent active by host OS.
 type ChannelStatistic struct {
 	RawBytes
 	TotalTimeS uint32   `json:"totalTimeS"`
 	OSTimes    []OSTime `json:"osTimes,omitempty"`
 }
 
+// OSTime records the time spent using one host OS mode.
 type OSTime struct {
 	RawBytes
 	OS    OSMode `json:"os"`
 	TimeS uint32 `json:"timeS"`
 }
 
+// TypeTouchStatistics contains cumulative typing-only and touching-only times.
 type TypeTouchStatistics struct {
 	RawBytes
 	TypeOnlyTimeS  uint32 `json:"typeOnlyTimeS"`
 	TouchOnlyTimeS uint32 `json:"touchOnlyTimeS"`
 }
 
+// ParseStatisticsResponse validates and decodes a statistics response.
 func ParseStatisticsResponse(r Response) (*Statistics, error) {
 	if r.Field != 16 {
 		return nil, fmt.Errorf("proto: response field %d is not statistics", r.Field)
@@ -75,6 +83,7 @@ func ParseStatisticsResponse(r Response) (*Statistics, error) {
 	return DecodeStatistics(r.Body)
 }
 
+// DecodeStatistics parses cumulative usage counters while preserving raw bytes.
 func DecodeStatistics(pb []byte) (*Statistics, error) {
 	s := &Statistics{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
@@ -83,15 +92,35 @@ func DecodeStatistics(pb []byte) (*Statistics, error) {
 		}
 		switch num {
 		case 1:
-			return decodeChild(body, func(b []byte) (err error) { s.Keyboard, err = decodeKeyboardStatistics(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				s.Keyboard, err = decodeKeyboardStatistics(b)
+				return err
+			})
 		case 2:
-			return decodeChild(body, func(b []byte) (err error) { s.Gestures, err = decodeGestureStatistics(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				s.Gestures, err = decodeGestureStatistics(b)
+				return err
+			})
 		case 3:
-			return decodeChild(body, func(b []byte) (err error) { s.Sliders, err = decodeSliderStatistics(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				s.Sliders, err = decodeSliderStatistics(b)
+				return err
+			})
 		case 4:
-			return decodeChild(body, func(b []byte) (err error) { s.Channels, err = decodeChannelStatistics(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				s.Channels, err = decodeChannelStatistics(b)
+				return err
+			})
 		case 5:
-			return decodeChild(body, func(b []byte) (err error) { s.TypeTouchOnly, err = decodeTypeTouchStatistics(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				s.TypeTouchOnly, err = decodeTypeTouchStatistics(b)
+				return err
+			})
 		}
 		return nil
 	})
@@ -197,7 +226,11 @@ func decodeChannelStatistic(pb []byte) (*ChannelStatistic, error) {
 			c.TotalTimeS = counterValue(body)
 		}
 		if num == 2 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) error { v, err := decodeOSTime(b); c.OSTimes = append(c.OSTimes, *v); return err })
+			return decodeChild(body, func(b []byte) error {
+				v, err := decodeOSTime(b)
+				c.OSTimes = append(c.OSTimes, *v)
+				return err
+			})
 		}
 		return nil
 	})
@@ -246,6 +279,7 @@ type MiscDiagnostics struct {
 	IsWinSettings          *bool `json:"isWinSettings,omitempty"`
 }
 
+// ParseMiscDiagnosticsResponse validates and decodes a diagnostics response.
 func ParseMiscDiagnosticsResponse(r Response) (*MiscDiagnostics, error) {
 	if r.Field != 15 {
 		return nil, fmt.Errorf("proto: response field %d is not misc diagnostics", r.Field)
@@ -253,6 +287,7 @@ func ParseMiscDiagnosticsResponse(r Response) (*MiscDiagnostics, error) {
 	return DecodeMiscDiagnostics(r.Body)
 }
 
+// DecodeMiscDiagnostics parses miscellaneous diagnostics while preserving raw bytes.
 func DecodeMiscDiagnostics(pb []byte) (*MiscDiagnostics, error) {
 	d := &MiscDiagnostics{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
+// Response status values for GET_PROFILE_SETTINGS.
 const (
 	GetProfileStatusOK = iota
 	GetProfileStatusUnknownError
@@ -16,6 +17,7 @@ const (
 	GetProfileStatusNotFound
 )
 
+// Response status values for SET_PROFILE_SETTINGS.
 const (
 	SetProfileStatusOK = iota
 	SetProfileStatusUnknownError
@@ -48,12 +50,25 @@ type profileSettingsJSON struct {
 	Raw       []byte             `json:"raw,omitempty"`
 }
 
-// The standalone profile RPC includes raw bytes so clients can perform an
+var (
+	_ json.Marshaler   = ProfileSettings{}
+	_ json.Unmarshaler = (*ProfileSettings)(nil)
+)
+
+// MarshalJSON includes raw bytes so the standalone profile RPC can perform an
 // exact no-op round-trip without exposing ProfileRaw in get_settings JSON.
 func (p ProfileSettings) MarshalJSON() ([]byte, error) {
-	return json.Marshal(profileSettingsJSON{p.ID, p.Gestures, p.TouchZone, p.Backlight, p.Keyboard, p.Raw})
+	return json.Marshal(profileSettingsJSON{
+		ID:        p.ID,
+		Gestures:  p.Gestures,
+		TouchZone: p.TouchZone,
+		Backlight: p.Backlight,
+		Keyboard:  p.Keyboard,
+		Raw:       p.Raw,
+	})
 }
 
+// UnmarshalJSON restores both the decoded profile views and their raw bytes.
 func (p *ProfileSettings) UnmarshalJSON(data []byte) error {
 	var v profileSettingsJSON
 	if err := json.Unmarshal(data, &v); err != nil {
@@ -64,6 +79,7 @@ func (p *ProfileSettings) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// DecodeProfile parses the working profile while preserving its original bytes.
 func DecodeProfile(pb []byte) (*ProfileSettings, error) {
 	p := &ProfileSettings{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
@@ -76,19 +92,35 @@ func DecodeProfile(pb []byte) (*ProfileSettings, error) {
 			}
 		case 2:
 			if typ == protowire.BytesType {
-				return decodeChild(body, func(b []byte) (err error) { p.Gestures, err = DecodeGestures(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					p.Gestures, err = DecodeGestures(b)
+					return err
+				})
 			}
 		case 3:
 			if typ == protowire.BytesType {
-				return decodeChild(body, func(b []byte) (err error) { p.TouchZone, err = DecodeTouchZone(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					p.TouchZone, err = DecodeTouchZone(b)
+					return err
+				})
 			}
 		case 4:
 			if typ == protowire.BytesType {
-				return decodeChild(body, func(b []byte) (err error) { p.Backlight, err = DecodeBacklight(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					p.Backlight, err = DecodeBacklight(b)
+					return err
+				})
 			}
 		case 5:
 			if typ == protowire.BytesType {
-				return decodeChild(body, func(b []byte) (err error) { p.Keyboard, err = DecodeKeyboard(b); return })
+				return decodeChild(body, func(b []byte) error {
+					var err error
+					p.Keyboard, err = DecodeKeyboard(b)
+					return err
+				})
 			}
 		}
 		return nil
@@ -127,6 +159,7 @@ func (p *ProfileSettings) Bytes() ([]byte, error) {
 	return append([]byte(nil), p.Raw...), nil
 }
 
+// EncodeGetProfileSettings builds a request for the selected profile.
 func EncodeGetProfileSettings(profileID uint32) []byte {
 	var body []byte
 	if profileID != 0 {
@@ -136,6 +169,7 @@ func EncodeGetProfileSettings(profileID uint32) []byte {
 	return encodeEnvelope(ReqGetProfileSettings, body)
 }
 
+// EncodeSetProfileSettings builds a request containing an exact raw profile.
 func EncodeSetProfileSettings(profileRaw []byte) []byte {
 	var body []byte
 	body = protowire.AppendTag(body, 1, protowire.BytesType)
@@ -143,6 +177,7 @@ func EncodeSetProfileSettings(profileRaw []byte) []byte {
 	return encodeEnvelope(ReqSetProfileSettings, body)
 }
 
+// ParseProfileResponse validates and decodes a get or set profile response.
 func ParseProfileResponse(r Response) (*ProfileSettings, uint32, error) {
 	settingsField := protowire.Number(2)
 	switch r.Field {
@@ -185,12 +220,14 @@ type GestureSettings struct {
 	FourFinger  *Gesture `json:"fourFinger,omitempty"`
 }
 
+// Gesture contains the swipe and tap alternatives for a gesture.
 type Gesture struct {
 	RawBytes
 	Swipe *Swipe `json:"swipe,omitempty"`
 	Tap   *Tap   `json:"tap,omitempty"`
 }
 
+// Swipe maps each swipe direction to an action.
 type Swipe struct {
 	RawBytes
 	Up    *SwipeAction `json:"Up,omitempty"`
@@ -199,6 +236,7 @@ type Swipe struct {
 	Right *SwipeAction `json:"Right,omitempty"`
 }
 
+// SwipeAction is the selected action for one swipe direction.
 type SwipeAction struct {
 	RawBytes
 	Touchpad           *EmptyAction   `json:"touchpad,omitempty"`
@@ -209,6 +247,7 @@ type SwipeAction struct {
 	PredefinedShortcut *SwipeShortcut `json:"predefinedShortcut,omitempty"`
 }
 
+// SwipeShortcut contains a swipe shortcut and its continuation settings.
 type SwipeShortcut struct {
 	RawBytes
 	Direct      *KeyCombination `json:"direct,omitempty"`
@@ -217,11 +256,13 @@ type SwipeShortcut struct {
 	Opposite    *KeyCombination `json:"opposite,omitempty"`
 }
 
+// Tap contains the action assigned to a tap gesture.
 type Tap struct {
 	RawBytes
 	Action *TapAction `json:"action,omitempty"`
 }
 
+// TapAction is the selected action for a tap gesture.
 type TapAction struct {
 	RawBytes
 	Touchpad           *EmptyAction    `json:"touchpad,omitempty"`
@@ -232,6 +273,7 @@ type TapAction struct {
 	PredefinedShortcut *KeyCombination `json:"predefinedShortcut,omitempty"`
 }
 
+// KeyCombination contains up to four simultaneously pressed keys.
 type KeyCombination struct {
 	RawBytes
 	Key1 *Key `json:"key1,omitempty"`
@@ -240,12 +282,14 @@ type KeyCombination struct {
 	Key4 *Key `json:"key4,omitempty"`
 }
 
+// Key identifies a key by protocol type and code.
 type Key struct {
 	RawBytes
 	Type *uint32 `json:"type,omitempty"`
 	Code *uint32 `json:"code,omitempty"`
 }
 
+// DecodeGestures parses three-finger and four-finger gesture settings.
 func DecodeGestures(pb []byte) (*GestureSettings, error) {
 	g := &GestureSettings{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
@@ -273,9 +317,17 @@ func decodeGesture(pb []byte) (*Gesture, error) {
 		}
 		switch num {
 		case 1:
-			return decodeChild(body, func(b []byte) (err error) { g.Swipe, err = decodeSwipe(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				g.Swipe, err = decodeSwipe(b)
+				return err
+			})
 		case 2:
-			return decodeChild(body, func(b []byte) (err error) { g.Tap, err = decodeTap(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				g.Tap, err = decodeTap(b)
+				return err
+			})
 		}
 		return nil
 	})
@@ -384,7 +436,11 @@ func decodeTap(pb []byte) (*Tap, error) {
 	t := &Tap{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 1 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { t.Action, err = decodeTapAction(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				t.Action, err = decodeTapAction(b)
+				return err
+			})
 		}
 		return nil
 	})
@@ -430,6 +486,7 @@ func decodeTapAction(pb []byte) (*TapAction, error) {
 	return a, err
 }
 
+// DecodeKeyCombination parses a key combination while preserving raw bytes.
 func DecodeKeyCombination(pb []byte) (*KeyCombination, error) {
 	k := &KeyCombination{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
@@ -490,6 +547,7 @@ type TouchZoneSettings struct {
 	Slider   *SliderSettings   `json:"slider,omitempty"`
 }
 
+// TouchpadSettings contains the touchpad's gesture enable flags.
 type TouchpadSettings struct {
 	RawBytes
 	Enable          *bool `json:"enable,omitempty"`
@@ -497,12 +555,14 @@ type TouchpadSettings struct {
 	TwoFingerEnable *bool `json:"twoFingerEnable,omitempty"`
 }
 
+// SliderSettings contains the left and right slider configurations.
 type SliderSettings struct {
 	RawBytes
 	Left  *Slider `json:"left,omitempty"`
 	Right *Slider `json:"right,omitempty"`
 }
 
+// Slider contains one slider's sensitivity and selected action.
 type Slider struct {
 	RawBytes
 	Sensitivity        *uint32         `json:"sensitivity,omitempty"`
@@ -513,12 +573,14 @@ type Slider struct {
 	PredefinedShortcut *SliderShortcut `json:"predefinedShortcut,omitempty"`
 }
 
+// SliderShortcut contains the increment and decrement key combinations.
 type SliderShortcut struct {
 	RawBytes
 	Inc *KeyCombination `json:"inc,omitempty"`
 	Dec *KeyCombination `json:"dec,omitempty"`
 }
 
+// DecodeTouchZone parses touchpad and slider settings.
 func DecodeTouchZone(pb []byte) (*TouchZoneSettings, error) {
 	t := &TouchZoneSettings{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
@@ -527,9 +589,17 @@ func DecodeTouchZone(pb []byte) (*TouchZoneSettings, error) {
 		}
 		switch num {
 		case 1:
-			return decodeChild(body, func(b []byte) (err error) { t.Touchpad, err = decodeTouchpadSettings(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				t.Touchpad, err = decodeTouchpadSettings(b)
+				return err
+			})
 		case 2:
-			return decodeChild(body, func(b []byte) (err error) { t.Slider, err = decodeSliderSettings(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				t.Slider, err = decodeSliderSettings(b)
+				return err
+			})
 		}
 		return nil
 	})
@@ -646,6 +716,7 @@ type KeyboardSettings struct {
 	FKey *FKeySettings `json:"fKey,omitempty"`
 }
 
+// FKeySettings maps the twelve function keys to their actions.
 type FKeySettings struct {
 	RawBytes
 	F1  *KeyAction `json:"F1,omitempty"`
@@ -662,6 +733,7 @@ type FKeySettings struct {
 	F12 *KeyAction `json:"F12,omitempty"`
 }
 
+// KeyAction is the selected action for a function key.
 type KeyAction struct {
 	RawBytes
 	CustomShortcut     *KeyCombination `json:"customShortcut,omitempty"`
@@ -671,11 +743,16 @@ type KeyAction struct {
 	PredefinedShortcut *KeyCombination `json:"predefinedShortcut,omitempty"`
 }
 
+// DecodeKeyboard parses function-key settings while preserving raw bytes.
 func DecodeKeyboard(pb []byte) (*KeyboardSettings, error) {
 	k := &KeyboardSettings{RawBytes: rawBytes(pb)}
 	err := walkFields(pb, func(num protowire.Number, typ protowire.Type, body []byte) error {
 		if num == 1 && typ == protowire.BytesType {
-			return decodeChild(body, func(b []byte) (err error) { k.FKey, err = decodeFKeys(b); return })
+			return decodeChild(body, func(b []byte) error {
+				var err error
+				k.FKey, err = decodeFKeys(b)
+				return err
+			})
 		}
 		return nil
 	})
