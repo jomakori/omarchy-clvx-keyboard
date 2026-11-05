@@ -18,12 +18,9 @@ const (
 	ReqHeartBeat          = 3
 	ReqSetProfileSettings = 4
 	ReqGetProfileSettings = 5
-	ReqControlAI          = 6
-	ReqGetAIState         = 7
 	ReqSetOSMode          = 8
 	ReqGetDefaultSettings = 9
 	ReqPerformFullReset   = 10
-	ReqGetUserAIData      = 11
 	ReqPerformRestart     = 12
 	ReqGetDiagnostics     = 13
 	ReqGetStatistics      = 14
@@ -37,12 +34,9 @@ var reqField = map[uint32]protowire.Number{
 	ReqGetDeviceInfo:      5,
 	ReqHeartBeat:          6,
 	ReqGetProfileSettings: 7,
-	ReqControlAI:          8,
-	ReqGetAIState:         9,
 	ReqSetOSMode:          10,
 	ReqGetDefaultSettings: 11,
 	ReqPerformFullReset:   12,
-	ReqGetUserAIData:      13,
 	ReqPerformRestart:     14,
 	ReqGetDiagnostics:     15,
 	ReqGetStatistics:      16,

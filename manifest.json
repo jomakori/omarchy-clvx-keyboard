@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "joel",
   "license": "MIT",
-  "description": "Battery, connection state and active profile for Clevetura CLVX (TouchOnKeys) keyboards over USB and Bluetooth.",
+  "description": "Battery, connection state and settings for Clevetura CLVX (TouchOnKeys) keyboards over USB and Bluetooth.",
   "kinds": [
     "bar-widget",
     "service"
@@ -16,7 +16,7 @@
   },
   "barWidget": {
     "displayName": "CLVX Keyboard",
-    "description": "Keyboard battery and profile; click for connection and profile settings",
+    "description": "Keyboard battery and connection; click for touch, backlight, F-row and device settings",
     "category": "Input",
     "allowMultiple": false,
     "defaultSection": "right"

@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+
+	cproto "clvx/internal/proto"
 )
 
 // SocketPath returns $XDG_RUNTIME_DIR/clvx/clvx.sock (or a /tmp fallback).
@@ -70,16 +72,31 @@ func handle(ctx context.Context, d *Daemon, conn net.Conn) {
 		switch req.Method {
 		case "status":
 			_ = enc.Encode(Response{ID: req.ID, Result: d.Snapshot()})
-		case "set_profile":
+		case "get_settings":
+			settings, err := d.GetSettings()
+			if err != nil {
+				_ = enc.Encode(Response{ID: req.ID, Error: err.Error()})
+				continue
+			}
+			_ = enc.Encode(Response{ID: req.ID, Result: settings})
+		case "set_global":
 			var p struct {
-				Profile uint32 `json:"profile"`
+				Global *cproto.Global `json:"global"`
 			}
 			if err := json.Unmarshal(req.Params, &p); err != nil {
 				_ = enc.Encode(Response{ID: req.ID, Error: err.Error()})
 				continue
 			}
-			d.SetProfile(p.Profile)
-			_ = enc.Encode(Response{ID: req.ID, Result: d.Snapshot()})
+			if p.Global == nil {
+				_ = enc.Encode(Response{ID: req.ID, Error: "set_global needs a global object"})
+				continue
+			}
+			applied, err := d.SetGlobal(p.Global)
+			if err != nil {
+				_ = enc.Encode(Response{ID: req.ID, Error: err.Error()})
+				continue
+			}
+			_ = enc.Encode(Response{ID: req.ID, Result: applied})
 		case "subscribe":
 			ch, cancel := d.Subscribe()
 			_ = enc.Encode(Response{ID: req.ID, Result: d.Snapshot()})
