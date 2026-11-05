@@ -1,7 +1,6 @@
 package proto
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,8 +127,8 @@ func DecodeProfile(pb []byte) (*ProfileSettings, error) {
 	return p, err
 }
 
-// Bytes returns the original profile bytes for a raw-preserving write. Typed
-// profile mutation is intentionally not exposed until all nested encoders exist.
+// Bytes merges typed edits into the original profile. Unchanged subtrees are
+// emitted verbatim so fields unknown to this decoder survive every write.
 func (p *ProfileSettings) Bytes() ([]byte, error) {
 	if p == nil || p.Raw == nil {
 		return nil, errors.New("proto: profile has no raw bytes")
@@ -137,26 +136,30 @@ func (p *ProfileSettings) Bytes() ([]byte, error) {
 	if p.ID != 0 {
 		return nil, fmt.Errorf("proto: unsupported profile id %d", p.ID)
 	}
-	// If decoded views were supplied, reject edits rather than silently writing
-	// stale raw bytes. A raw-only request is also valid for transport tooling.
-	if p.Gestures != nil || p.TouchZone != nil || p.Backlight != nil || p.Keyboard != nil {
-		original, err := DecodeProfile(p.Raw)
-		if err != nil {
-			return nil, err
-		}
-		got, err := json.Marshal(p)
-		if err != nil {
-			return nil, err
-		}
-		want, err := json.Marshal(original)
-		if err != nil {
-			return nil, err
-		}
-		if !bytes.Equal(got, want) {
-			return nil, errors.New("proto: typed profile edits are not supported; preserve raw and decoded fields exactly")
-		}
+	original, err := DecodeProfile(p.Raw)
+	if err != nil {
+		return nil, fmt.Errorf("proto: decode original profile: %w", err)
 	}
-	return append([]byte(nil), p.Raw...), nil
+	if original.ID != 0 {
+		return nil, fmt.Errorf("proto: unsupported original profile id %d", original.ID)
+	}
+	// A raw-only request remains valid for transport tooling.
+	if p.Gestures == nil && p.TouchZone == nil && p.Backlight == nil && p.Keyboard == nil {
+		return append([]byte(nil), p.Raw...), nil
+	}
+	inheritRawBytes(p, original)
+	unchanged, err := decodedEqual(p, original)
+	if err != nil {
+		return nil, err
+	}
+	if unchanged {
+		return append([]byte(nil), p.Raw...), nil
+	}
+	encoded, err := encodeProfile(p, original)
+	if err != nil {
+		return nil, err
+	}
+	return encoded, nil
 }
 
 // EncodeGetProfileSettings builds a request for the selected profile.

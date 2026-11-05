@@ -3,8 +3,8 @@ package proto
 import "google.golang.org/protobuf/encoding/protowire"
 
 // BacklightSettings contains independent keyboard, touchpad, and slider zones.
-// Every message retains Raw so a future writer can round-trip newer firmware
-// fields without understanding them.
+// Every message retains Raw so writes can round-trip newer firmware fields
+// without understanding them.
 type BacklightSettings struct {
 	RawBytes
 	Keyboard    *KeyboardBacklight `json:"keyboard,omitempty"`

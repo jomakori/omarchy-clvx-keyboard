@@ -46,6 +46,7 @@ Item {
     property var deviceDefaults: null
     property int restarts: 0
     property var pendingRequest: null
+    property var pendingQueue: ([])
     property bool requestHadStatus: false
     property string activeMethod: ""
   }
@@ -66,13 +67,14 @@ Item {
     state.lastError = status.error === undefined || status.error === null ? "" : String(status.error)
   }
 
-  function handleLine(line) {
+  function handleLine(line, sourceMethod) {
     var text = String(line || "").trim()
     if (text === "") return false
     if (text.length > 65536) {
       state.lastError = "clvxd response was too large"
       return false
     }
+    var method = sourceMethod !== undefined ? String(sourceMethod) : state.activeMethod
     try {
       var message = JSON.parse(text)
       if (!message || typeof message !== "object") return false
@@ -83,28 +85,67 @@ Item {
       if (!message.result || typeof message.result !== "object" || Array.isArray(message.result)) return false
       if ("connected" in message.result || "transport" in message.result || "batteryPercent" in message.result) {
         applyStatus(message.result)
+        if (method === "subscribe" || method === "status") return true
+      }
+      // Route default_settings exclusively to state.deviceDefaults so it never
+      // overwrites live state.settings or state.profile.
+      if (method === "default_settings") {
+        state.deviceDefaults = message.result
+        return true
       }
       if ("fwVersion" in message.result || "barCode" in message.result || "serialNumber" in message.result
-          || "deviceMode" in message.result || "kbmInfo" in message.result || state.activeMethod === "device_info") {
+          || "deviceMode" in message.result || "kbmInfo" in message.result || method === "device_info") {
         state.deviceInfo = message.result
+        return true
       }
-      if ("global" in message.result || "settings" in message.result) {
-        if (state.activeMethod === "default_settings") {
-          state.deviceDefaults = message.result
-        } else {
-          state.settings = message.result
-        }
+      if (method === "get_settings" || method === "set_global"
+          || "global" in message.result || "settings" in message.result) {
+        state.settings = message.result
+        return true
       }
-      if (("id" in message.result && "raw" in message.result)
+      if (method === "get_profile_settings" || method === "set_profile_settings"
+          || ("id" in message.result && "raw" in message.result)
           || (!("global" in message.result) && !("fwVersion" in message.result) && !("kbmInfo" in message.result)
               && ("touchZone" in message.result || "keyboard" in message.result || "fKey" in message.result || "backlight" in message.result))) {
         state.profile = message.result
         if (message.result.raw !== undefined) state.profileRaw = message.result.raw
+        return true
       }
       return true
     } catch (error) {
       state.lastError = "Invalid response from clvxd"
       return false
+    }
+  }
+
+  function defaultProfileObject() {
+    var d = state.deviceDefaults
+    if (!d || typeof d !== "object") return null
+    if (d.globalProfile && typeof d.globalProfile === "object") return d.globalProfile
+    if (d.profile && typeof d.profile === "object") return d.profile
+    if (d.settings && typeof d.settings === "object") {
+      if (d.settings.globalProfile && typeof d.settings.globalProfile === "object") return d.settings.globalProfile
+      if (d.settings.touchZone || d.settings.backlight || d.settings.keyboard || d.settings.gestures) return d.settings
+    }
+    if (d.touchZone || d.backlight || d.keyboard || d.gestures) return d
+    return null
+  }
+
+  function extractDefaultZoneColor(zone) {
+    var fallback = { red: 255, green: 255, blue: 255 }
+    if (!zone || typeof zone !== "object") return fallback
+    var src = (zone.solidColor && zone.solidColor.color) ? zone.solidColor.color
+      : ((zone.breathing && zone.breathing.color) ? zone.breathing.color
+      : ((zone.interactiveAnimation && zone.interactiveAnimation.color) ? zone.interactiveAnimation.color
+      : (zone.color ? zone.color : null)))
+    if (!src || typeof src !== "object") return fallback
+    var r = Number(src.red !== undefined ? src.red : 255)
+    var g = Number(src.green !== undefined ? src.green : 255)
+    var b = Number(src.blue !== undefined ? src.blue : 255)
+    return {
+      red: isFinite(r) ? Math.max(0, Math.min(255, Math.round(r))) : 255,
+      green: isFinite(g) ? Math.max(0, Math.min(255, Math.round(g))) : 255,
+      blue: isFinite(b) ? Math.max(0, Math.min(255, Math.round(b))) : 255
     }
   }
 
@@ -142,7 +183,7 @@ Item {
     id: subscriber
     running: false
     command: ["python3", "-I", "-u", "-c", root.subscriberScript, root.socketPath]
-    stdout: SplitParser { onRead: function(line) { root.handleLine(line) } }
+    stdout: SplitParser { onRead: function(line) { root.handleLine(line, "subscribe") } }
     onExited: {
       root.markUnavailable("clvxd socket is unavailable")
       restartTimer.interval = Math.min(30000, 1000 * Math.pow(2, Math.min(5, state.restarts)))
@@ -204,7 +245,7 @@ Item {
     running: false
     stdout: SplitParser {
       onRead: function(line) {
-        if (root.handleLine(line)) state.requestHadStatus = true
+        if (root.handleLine(line, state.activeMethod)) state.requestHadStatus = true
       }
     }
     onExited: function(code) {
@@ -214,6 +255,66 @@ Item {
     }
   }
 
+  function isPollMethod(method) {
+    return method === "status"
+      || method === "get_settings"
+      || method === "get_profile_settings"
+      || method === "device_info"
+      || method === "default_settings"
+  }
+
+  function enqueueRequest(request) {
+    var queue = state.pendingQueue ? state.pendingQueue.slice() : []
+    var incomingIsPoll = isPollMethod(request.method)
+
+    if (request.method === "set_global" && request.params && request.params.global) {
+      for (var i = 0; i < queue.length; i++) {
+        if (queue[i].method === "set_global" && queue[i].params && queue[i].params.global) {
+          var merged = Object.assign({}, queue[i].params.global, request.params.global)
+          queue[i] = { method: "set_global", params: { global: merged } }
+          state.pendingQueue = queue
+          state.pendingRequest = queue[0] || null
+          return
+        }
+      }
+    }
+
+    if (request.method === "set_profile_settings") {
+      for (var j = 0; j < queue.length; j++) {
+        if (queue[j].method === "set_profile_settings") {
+          queue[j] = request
+          state.pendingQueue = queue
+          state.pendingRequest = queue[0] || null
+          return
+        }
+      }
+    }
+
+    if (incomingIsPoll) {
+      for (var k = 0; k < queue.length; k++) {
+        if (queue[k].method === request.method) {
+          state.pendingQueue = queue
+          state.pendingRequest = queue[0] || null
+          return
+        }
+      }
+      queue.push(request)
+    } else {
+      // Insert writes ahead of queued read-only polls so polls never delay or displace writes.
+      var insertIdx = queue.length
+      for (var m = 0; m < queue.length; m++) {
+        if (isPollMethod(queue[m].method)) {
+          insertIdx = m
+          break
+        }
+      }
+      queue.splice(insertIdx, 0, request)
+    }
+
+    state.pendingQueue = queue
+    state.pendingRequest = queue[0] || null
+  }
+
   function startRequest(request) {
     if (!request || typeof request.method !== "string" || request.method === "") return false
     if (root.socketPath === "") {
@@ -221,25 +322,9 @@ Item {
       return false
     }
     if (requestProcess.running) {
-      // A read-only poll must not displace a queued write request.
-      var incomingIsPoll = request.method === "status"
-        || request.method === "get_settings"
-        || request.method === "get_profile_settings"
-        || request.method === "device_info"
-        || request.method === "default_settings"
-      if (state.pendingRequest === null || !incomingIsPoll) {
-        if (state.pendingRequest && state.pendingRequest.method === "set_global" && request.method === "set_global"
-            && state.pendingRequest.params && state.pendingRequest.params.global
-            && request.params && request.params.global) {
-          var merged = Object.assign({}, state.pendingRequest.params.global, request.params.global)
-          state.pendingRequest = { method: "set_global", params: { global: merged } }
-        } else {
-          state.pendingRequest = request
-        }
-      }
+      enqueueRequest(request)
       return true
     }
-    state.pendingRequest = null
     state.requestHadStatus = false
     state.activeMethod = request.method
     var command = ["python3", "-I", "-u", "-c", root.requestScript, root.socketPath, request.method]
@@ -252,10 +337,19 @@ Item {
   }
 
   function runPendingRequest() {
-    if (requestProcess.running || state.pendingRequest === null) return
-    var request = state.pendingRequest
-    state.pendingRequest = null
-    startRequest(request)
+    if (requestProcess.running) return
+    var queue = state.pendingQueue ? state.pendingQueue.slice() : []
+    if (queue.length === 0 && state.pendingRequest !== null) {
+      var single = state.pendingRequest
+      state.pendingRequest = null
+      startRequest(single)
+      return
+    }
+    if (queue.length === 0) return
+    var nextReq = queue.shift()
+    state.pendingQueue = queue
+    state.pendingRequest = queue[0] || null
+    startRequest(nextReq)
   }
 
   function refresh() {
@@ -311,8 +405,126 @@ Item {
     return startRequest({ method: "default_settings" })
   }
 
+  function getDeviceDefaults() {
+    return getDefaultSettings()
+  }
+
+  function get_device_defaults() {
+    return getDefaultSettings()
+  }
+
   function default_settings() {
     return getDefaultSettings()
+  }
+
+  function resetGlobal(field) {
+    var key = String(field || "").trim()
+    if (key === "") return false
+    var defs = state.deviceDefaults
+    if (!defs || typeof defs !== "object" || !defs.global || typeof defs.global !== "object") return false
+    if (defs.global[key] === undefined) return false
+    var patch = {}
+    patch[key] = JSON.parse(JSON.stringify(defs.global[key]))
+    if (state.settings && state.settings.global) {
+      var nextSettings = JSON.parse(JSON.stringify(state.settings))
+      nextSettings.global[key] = patch[key]
+      state.settings = nextSettings
+    }
+    return setGlobal(patch)
+  }
+
+  function reset_global(field) {
+    return resetGlobal(field)
+  }
+
+  function resetProfileField(path) {
+    var rawPath = String(path || "").trim()
+    if (rawPath === "") return false
+    var defProf = defaultProfileObject()
+    if (!defProf || !state.profile || typeof state.profile !== "object") return false
+
+    var normPath = rawPath
+    if (normPath.indexOf("slider.") === 0) normPath = "touchZone." + normPath
+    else if (normPath.indexOf("touchpad.") === 0) normPath = "touchZone." + normPath
+    else if (normPath.indexOf("fKey.") === 0) normPath = "keyboard." + normPath
+
+    var nextProfile = JSON.parse(JSON.stringify(state.profile))
+
+    if (normPath === "touchZone.slider.left.sensitivity" || normPath === "touchZone.slider.right.sensitivity") {
+      var sensSide = normPath.split(".")[2]
+      var defSensSlider = (defProf.touchZone && defProf.touchZone.slider) ? defProf.touchZone.slider[sensSide] : null
+      if (!defSensSlider || typeof defSensSlider !== "object") return false
+      if (!nextProfile.touchZone) nextProfile.touchZone = {}
+      if (!nextProfile.touchZone.slider) nextProfile.touchZone.slider = {}
+      if (!nextProfile.touchZone.slider[sensSide]) nextProfile.touchZone.slider[sensSide] = JSON.parse(JSON.stringify(defSensSlider))
+      nextProfile.touchZone.slider[sensSide].sensitivity = defSensSlider.sensitivity !== undefined ? defSensSlider.sensitivity : 3
+    } else if (normPath === "touchZone.slider.left.behavior" || normPath === "touchZone.slider.right.behavior") {
+      var behSide = normPath.split(".")[2]
+      var defBehSlider = (defProf.touchZone && defProf.touchZone.slider) ? defProf.touchZone.slider[behSide] : null
+      if (!defBehSlider || typeof defBehSlider !== "object") return false
+      if (!nextProfile.touchZone) nextProfile.touchZone = {}
+      if (!nextProfile.touchZone.slider) nextProfile.touchZone.slider = {}
+      var prevSlider = nextProfile.touchZone.slider[behSide]
+      var keepSens = (prevSlider && prevSlider.sensitivity !== undefined) ? prevSlider.sensitivity : undefined
+      var restoredSlider = JSON.parse(JSON.stringify(defBehSlider))
+      if (keepSens !== undefined) restoredSlider.sensitivity = keepSens
+      nextProfile.touchZone.slider[behSide] = restoredSlider
+    } else if (normPath === "backlight.touchpad.effect") {
+      var defTpZone = (defProf.backlight && defProf.backlight.touchpad) ? defProf.backlight.touchpad : null
+      if (!defTpZone || typeof defTpZone !== "object") return false
+      if (!nextProfile.backlight) nextProfile.backlight = {}
+      var prevTpZone = nextProfile.backlight.touchpad
+      var hadPrevColor = prevTpZone && ((prevTpZone.solidColor && prevTpZone.solidColor.color) || (prevTpZone.breathing && prevTpZone.breathing.color))
+      var prevCol = hadPrevColor ? extractDefaultZoneColor(prevTpZone) : null
+      var restoredTp = JSON.parse(JSON.stringify(defTpZone))
+      if (prevCol) {
+        if (restoredTp.solidColor) restoredTp.solidColor.color = prevCol
+        else if (restoredTp.breathing) restoredTp.breathing.color = prevCol
+      }
+      nextProfile.backlight.touchpad = restoredTp
+    } else if (normPath === "backlight.touchpad.color") {
+      var defColorZone = (defProf.backlight && defProf.backlight.touchpad) ? defProf.backlight.touchpad : null
+      if (!defColorZone || typeof defColorZone !== "object") return false
+      var defCol = extractDefaultZoneColor(defColorZone)
+      if (!nextProfile.backlight) nextProfile.backlight = {}
+      if (!nextProfile.backlight.touchpad || typeof nextProfile.backlight.touchpad !== "object") {
+        nextProfile.backlight.touchpad = JSON.parse(JSON.stringify(defColorZone))
+      }
+      var curTp = nextProfile.backlight.touchpad
+      if (curTp.solidColor && typeof curTp.solidColor === "object") {
+        curTp.solidColor.color = JSON.parse(JSON.stringify(defCol))
+      } else if (curTp.breathing && typeof curTp.breathing === "object") {
+        curTp.breathing.color = JSON.parse(JSON.stringify(defCol))
+      } else if (curTp.interactiveAnimation && typeof curTp.interactiveAnimation === "object") {
+        curTp.interactiveAnimation.color = JSON.parse(JSON.stringify(defCol))
+      } else {
+        curTp.color = JSON.parse(JSON.stringify(defCol))
+      }
+    } else {
+      var parts = normPath.split(".")
+      var srcCursor = defProf
+      for (var i = 0; i < parts.length; i++) {
+        if (!srcCursor || typeof srcCursor !== "object" || srcCursor[parts[i]] === undefined) return false
+        srcCursor = srcCursor[parts[i]]
+      }
+      var dstCursor = nextProfile
+      for (var j = 0; j < parts.length - 1; j++) {
+        var seg = parts[j]
+        if (!dstCursor[seg] || typeof dstCursor[seg] !== "object") dstCursor[seg] = {}
+        dstCursor = dstCursor[seg]
+      }
+      dstCursor[parts[parts.length - 1]] = JSON.parse(JSON.stringify(srcCursor))
+    }
+
+    if (state.profile.raw !== undefined) nextProfile.raw = state.profile.raw
+    else if (state.profileRaw !== undefined && state.profileRaw !== null) nextProfile.raw = state.profileRaw
+
+    state.profile = nextProfile
+    return setProfileSettings(nextProfile)
+  }
+
+  function reset_profile_field(path) {
+    return resetProfileField(path)
   }
 
   function setOsMode(mode) {

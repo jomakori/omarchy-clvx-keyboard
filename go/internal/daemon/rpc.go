@@ -54,9 +54,8 @@ func (d *Daemon) ProfileSettings() (*cproto.ProfileSettings, error) {
 	return profile, nil
 }
 
-// SetProfileSettings performs a byte-exact profile write. Typed profile
-// mutation remains decode-only; callers must supply a profile obtained from
-// the device so unknown fields cannot be discarded.
+// SetProfileSettings merges typed edits into a device-supplied raw profile.
+// Callers must supply the raw profile so unknown fields can be preserved.
 func (d *Daemon) SetProfileSettings(profile *cproto.ProfileSettings) (*cproto.ProfileSettings, error) {
 	raw, err := profile.Bytes()
 	if err != nil {

@@ -2,9 +2,9 @@ package proto
 
 import "google.golang.org/protobuf/encoding/protowire"
 
-// RawBytes retains the original protobuf message. Decoded customization
-// settings are read-only views; writes always use these bytes rather than
-// re-encoding a partial schema and dropping fields added by newer firmware.
+// RawBytes retains the original protobuf message. Profile writes emit this
+// message verbatim while its decoded view is unchanged, preserving fields
+// added by newer firmware.
 type RawBytes struct {
 	Raw []byte `json:"-"`
 }

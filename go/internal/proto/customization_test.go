@@ -161,7 +161,15 @@ func TestProfileEnvelopeAndResponses(t *testing.T) {
 		t.Fatalf("profile JSON/raw round-trip: %x, %v", raw, err)
 	}
 	roundTrip.Backlight.LeftSlider = nil
-	if _, err := roundTrip.Bytes(); err == nil {
-		t.Fatal("typed profile edit was not rejected")
+	editedRaw, err := roundTrip.Bytes()
+	if err != nil {
+		t.Fatalf("ProfileSettings.Bytes() after typed edit: %v", err)
+	}
+	edited, err := DecodeProfile(editedRaw)
+	if err != nil {
+		t.Fatalf("DecodeProfile() after typed edit: %v", err)
+	}
+	if edited.Backlight == nil || edited.Backlight.LeftSlider != nil {
+		t.Fatalf("DecodeProfile() left slider = %+v, want removed", edited.Backlight)
 	}
 }
