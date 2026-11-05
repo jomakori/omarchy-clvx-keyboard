@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.joel.clvx-keyboard",
   "name": "CLVX Keyboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "joel",
   "license": "MIT",
   "description": "Battery, connection state and settings for Clevetura CLVX (TouchOnKeys) keyboards over USB and Bluetooth.",
