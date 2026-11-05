@@ -26,6 +26,8 @@ Item {
   readonly property var settings: state.settings
   readonly property var profile: state.profile
   readonly property var profileRaw: state.profileRaw
+  readonly property var deviceInfo: state.deviceInfo
+  readonly property var deviceDefaults: state.deviceDefaults
 
   QtObject {
     id: state
@@ -40,9 +42,12 @@ Item {
     property var settings: null
     property var profile: null
     property var profileRaw: null
+    property var deviceInfo: null
+    property var deviceDefaults: null
     property int restarts: 0
     property var pendingRequest: null
     property bool requestHadStatus: false
+    property string activeMethod: ""
   }
 
   function numeric(value, fallback) {
@@ -79,11 +84,20 @@ Item {
       if ("connected" in message.result || "transport" in message.result || "batteryPercent" in message.result) {
         applyStatus(message.result)
       }
+      if ("fwVersion" in message.result || "barCode" in message.result || "serialNumber" in message.result
+          || "deviceMode" in message.result || "kbmInfo" in message.result || state.activeMethod === "device_info") {
+        state.deviceInfo = message.result
+      }
       if ("global" in message.result || "settings" in message.result) {
-        state.settings = message.result
+        if (state.activeMethod === "default_settings") {
+          state.deviceDefaults = message.result
+        } else {
+          state.settings = message.result
+        }
       }
       if (("id" in message.result && "raw" in message.result)
-          || (!("global" in message.result) && ("touchZone" in message.result || "keyboard" in message.result || "fKey" in message.result))) {
+          || (!("global" in message.result) && !("fwVersion" in message.result) && !("kbmInfo" in message.result)
+              && ("touchZone" in message.result || "keyboard" in message.result || "fKey" in message.result || "backlight" in message.result))) {
         state.profile = message.result
         if (message.result.raw !== undefined) state.profileRaw = message.result.raw
       }
@@ -195,6 +209,7 @@ Item {
     }
     onExited: function(code) {
       if (code !== 0) state.lastError = "clvxd request failed"
+      state.activeMethod = ""
       Qt.callLater(root.runPendingRequest)
     }
   }
@@ -206,8 +221,12 @@ Item {
       return false
     }
     if (requestProcess.running) {
-      // A status/get_settings/get_profile_settings poll must not displace a queued write request.
-      var incomingIsPoll = request.method === "status" || request.method === "get_settings" || request.method === "get_profile_settings"
+      // A read-only poll must not displace a queued write request.
+      var incomingIsPoll = request.method === "status"
+        || request.method === "get_settings"
+        || request.method === "get_profile_settings"
+        || request.method === "device_info"
+        || request.method === "default_settings"
       if (state.pendingRequest === null || !incomingIsPoll) {
         if (state.pendingRequest && state.pendingRequest.method === "set_global" && request.method === "set_global"
             && state.pendingRequest.params && state.pendingRequest.params.global
@@ -222,6 +241,7 @@ Item {
     }
     state.pendingRequest = null
     state.requestHadStatus = false
+    state.activeMethod = request.method
     var command = ["python3", "-I", "-u", "-c", root.requestScript, root.socketPath, request.method]
     if (request.params && typeof request.params === "object" && !Array.isArray(request.params)) {
       command.push(JSON.stringify(request.params))
@@ -277,6 +297,48 @@ Item {
 
   function set_profile_settings(profileParams) {
     return setProfileSettings(profileParams)
+  }
+
+  function getDeviceInfo() {
+    return startRequest({ method: "device_info" })
+  }
+
+  function device_info() {
+    return getDeviceInfo()
+  }
+
+  function getDefaultSettings() {
+    return startRequest({ method: "default_settings" })
+  }
+
+  function default_settings() {
+    return getDefaultSettings()
+  }
+
+  function setOsMode(mode) {
+    var m = (mode === undefined || mode === null || String(mode) === "") ? "LINUX" : String(mode)
+    return startRequest({ method: "set_os_mode", params: { mode: m } })
+  }
+
+  function set_os_mode(mode) {
+    return setOsMode(mode)
+  }
+
+  function restartDevice() {
+    return startRequest({ method: "restart" })
+  }
+
+  function restart() {
+    return restartDevice()
+  }
+
+  function factoryReset(confirmed) {
+    if (confirmed !== true && (!confirmed || typeof confirmed !== "object" || confirmed.confirm !== true)) return false
+    return startRequest({ method: "factory_reset", params: { confirm: true } })
+  }
+
+  function factory_reset(confirmed) {
+    return factoryReset(confirmed)
   }
 
   Component.onCompleted: root.connect()

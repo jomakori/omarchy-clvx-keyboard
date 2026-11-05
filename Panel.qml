@@ -33,6 +33,9 @@ Panel {
   readonly property var serverProfile: (service && service.profile) ? service.profile : null
   readonly property bool profileReady: serverProfile !== null
   readonly property bool profileControlsEnabled: connected && profileReady
+  readonly property var serverDeviceInfo: (service && service.deviceInfo) ? service.deviceInfo : null
+  readonly property bool deviceInfoReady: serverDeviceInfo !== null
+  property bool factoryResetConfirmed: false
 
   readonly property string transportText: {
     if (!connected) return "Disconnected"
@@ -69,9 +72,34 @@ Panel {
     return val(key, fallback) === true
   }
 
+  function numVal(key, fallback) {
+    var v = Number(val(key, fallback))
+    return isFinite(v) ? Math.round(v) : fallback
+  }
+
   function strVal(key, fallback) {
     var v = val(key, fallback)
     return v === undefined || v === null || v === "" ? fallback : String(v)
+  }
+
+  function formatBacklightTime(seconds) {
+    var s = Math.max(0, Math.round(Number(seconds) || 0))
+    if (s === 0) return "Always on (infinite)"
+    if (s % 60 === 0 && s >= 60) return Math.round(s / 60) + " min (" + s + "s)"
+    return s + "s"
+  }
+
+  function formatIdleBacklightTime(seconds) {
+    var s = Math.max(0, Math.round(Number(seconds) || 0))
+    if (s === 0) return "Disabled"
+    return s + "s"
+  }
+
+  function formatFwVersion(packed) {
+    var v = Number(packed)
+    if (!isFinite(v) || v <= 0) return "—"
+    var n = Math.round(v)
+    return ((n >>> 16) & 0xff) + "." + ((n >>> 8) & 0xff) + "." + (n & 0xff)
   }
 
   function setField(key, value) {
@@ -123,6 +151,37 @@ Panel {
     { value: "nothing", label: "Nothing" },
     { value: "asGlobal", label: "Global" }
   ]
+  readonly property var backlightZoneOptionsWithAurora: [
+    { value: "solidColor", label: "Solid" },
+    { value: "breathing", label: "Breathing" },
+    { value: "colorCycle", label: "Cycle" },
+    { value: "colorWave", label: "Wave" },
+    { value: "aurora", label: "Aurora" },
+    { value: "interactiveAnimation", label: "Interactive" }
+  ]
+  readonly property var backlightZoneOptionsSlider: [
+    { value: "solidColor", label: "Solid" },
+    { value: "breathing", label: "Breathing" },
+    { value: "colorCycle", label: "Cycle" },
+    { value: "colorWave", label: "Wave" },
+    { value: "interactiveAnimation", label: "Interactive" }
+  ]
+  readonly property var osModeOptions: [
+    { value: "LINUX", label: "Linux" },
+    { value: "WINDOWS", label: "Windows" },
+    { value: "MAC", label: "Mac" },
+    { value: "IPAD", label: "iPad" }
+  ]
+  property string selectedOsMode: "LINUX"
+
+  onServerDeviceInfoChanged: {
+    if (serverDeviceInfo && serverDeviceInfo.deviceMode && serverDeviceInfo.deviceMode.osMode) {
+      var m = String(serverDeviceInfo.deviceMode.osMode)
+      if (m === "LINUX" || m === "WINDOWS" || m === "MAC" || m === "IPAD") {
+        selectedOsMode = m
+      }
+    }
+  }
 
   onServerProfileChanged: {
     if (!serverProfile) return
@@ -164,8 +223,148 @@ Panel {
         if (!target.keyboard.fKey) target.keyboard.fKey = {}
         var prevF = target.keyboard.fKey[fk] || {}
         target.keyboard.fKey[fk] = buildFKeyVariant(prevF, String(v))
+      } else if (k.indexOf("backlight.") === 0) {
+        var parts = k.split(".")
+        var zKey = parts[1]
+        var prop = parts[2]
+        if (!target.backlight) target.backlight = {}
+        var prevZ = target.backlight[zKey] || {}
+        if (prop === "effect") {
+          target.backlight[zKey] = buildBacklightZoneVariant(zKey, prevZ, String(v))
+        } else if (prop === "transparency") {
+          var nextT = JSON.parse(JSON.stringify(prevZ))
+          nextT.transparency = Math.max(0, Math.min(100, Math.round(Number(v) || 0)))
+          target.backlight[zKey] = nextT
+        } else if (prop === "red" || prop === "green" || prop === "blue") {
+          target.backlight[zKey] = applyBacklightChannel(zKey, prevZ, prop, v)
+        }
       }
     }
+  }
+
+  function extractZoneColor(zone) {
+    // Channel range unconfirmed on firmware — assume 0-255 per RGB channel.
+    var fallback = { red: 255, green: 255, blue: 255 }
+    if (!zone || typeof zone !== "object") return fallback
+    var src = (zone.solidColor && zone.solidColor.color) ? zone.solidColor.color
+      : ((zone.breathing && zone.breathing.color) ? zone.breathing.color
+      : ((zone.interactiveAnimation && zone.interactiveAnimation.color) ? zone.interactiveAnimation.color : null))
+    if (!src || typeof src !== "object") return fallback
+    var r = Number(src.red !== undefined ? src.red : 255)
+    var g = Number(src.green !== undefined ? src.green : 255)
+    var b = Number(src.blue !== undefined ? src.blue : 255)
+    return {
+      red: isFinite(r) ? Math.max(0, Math.min(255, Math.round(r))) : 255,
+      green: isFinite(g) ? Math.max(0, Math.min(255, Math.round(g))) : 255,
+      blue: isFinite(b) ? Math.max(0, Math.min(255, Math.round(b))) : 255
+    }
+  }
+
+  function buildBacklightZoneVariant(zoneKey, prevZone, variant) {
+    var next = {}
+    if (prevZone && prevZone.transparency !== undefined) {
+      var tr = Number(prevZone.transparency)
+      if (isFinite(tr)) next.transparency = Math.max(0, Math.min(100, Math.round(tr)))
+    }
+    var col = extractZoneColor(prevZone)
+    var defaultPicker = {
+      markersNumber: 2,
+      markersArray: [
+        { color: { red: 255, green: 0, blue: 0 }, transparency: 0, position: 0 },
+        { color: { red: 0, green: 128, blue: 255 }, transparency: 0, position: 100 }
+      ]
+    }
+    if (variant === "solidColor") {
+      next.solidColor = (prevZone && prevZone.solidColor && typeof prevZone.solidColor === "object")
+        ? JSON.parse(JSON.stringify(prevZone.solidColor))
+        : { color: col }
+      if (!next.solidColor.color) next.solidColor.color = col
+    } else if (variant === "breathing") {
+      next.breathing = (prevZone && prevZone.breathing && typeof prevZone.breathing === "object")
+        ? JSON.parse(JSON.stringify(prevZone.breathing))
+        : { color: col, period: 1000 }
+      if (!next.breathing.color) next.breathing.color = col
+    } else if (variant === "colorCycle") {
+      next.colorCycle = (prevZone && prevZone.colorCycle && typeof prevZone.colorCycle === "object")
+        ? JSON.parse(JSON.stringify(prevZone.colorCycle))
+        : { colorLinePicker: defaultPicker, period: 1000 }
+    } else if (variant === "colorWave") {
+      next.colorWave = (prevZone && prevZone.colorWave && typeof prevZone.colorWave === "object")
+        ? JSON.parse(JSON.stringify(prevZone.colorWave))
+        : { colorLinePicker: defaultPicker, period: 1000, direction: 180, length: 400 }
+    } else if (variant === "aurora" && (zoneKey === "keyboard" || zoneKey === "touchpad")) {
+      next.aurora = {}
+    } else if (variant === "interactiveAnimation") {
+      if (prevZone && prevZone.interactiveAnimation && typeof prevZone.interactiveAnimation === "object") {
+        next.interactiveAnimation = JSON.parse(JSON.stringify(prevZone.interactiveAnimation))
+      } else if (zoneKey === "leftSlider" || zoneKey === "rightSlider") {
+        next.interactiveAnimation = { enable: true }
+      } else if (zoneKey === "touchpad") {
+        next.interactiveAnimation = { color: col, enable: true, trace: 2 }
+      } else {
+        next.interactiveAnimation = { color: col, enable: true, duration: 5 }
+      }
+    } else {
+      next.solidColor = { color: col }
+    }
+    return next
+  }
+
+  function applyBacklightChannel(zoneKey, prevZone, channel, value) {
+    // Channel range unconfirmed on firmware — assume 0-255 per RGB channel.
+    var chVal = Math.max(0, Math.min(255, Math.round(Number(value) || 0)))
+    var eff = detectZoneEffect(prevZone, "solidColor")
+    var next = buildBacklightZoneVariant(zoneKey, prevZone, eff)
+    if (next.solidColor) {
+      if (!next.solidColor.color) next.solidColor.color = { red: 255, green: 255, blue: 255 }
+      next.solidColor.color[channel] = chVal
+    } else if (next.breathing) {
+      if (!next.breathing.color) next.breathing.color = { red: 255, green: 255, blue: 255 }
+      next.breathing.color[channel] = chVal
+    }
+    return next
+  }
+
+  function detectZoneEffect(zone, fallback) {
+    if (zone && typeof zone === "object") {
+      if (zone.solidColor !== undefined && zone.solidColor !== null) return "solidColor"
+      if (zone.breathing !== undefined && zone.breathing !== null) return "breathing"
+      if (zone.colorCycle !== undefined && zone.colorCycle !== null) return "colorCycle"
+      if (zone.colorWave !== undefined && zone.colorWave !== null) return "colorWave"
+      if (zone.aurora !== undefined && zone.aurora !== null) return "aurora"
+      if (zone.interactiveAnimation !== undefined && zone.interactiveAnimation !== null) return "interactiveAnimation"
+    }
+    return fallback
+  }
+
+  function backlightZoneEffect(zoneKey, fallback) {
+    var k = "backlight." + zoneKey + ".effect"
+    if (pendingProfile && pendingProfile[k] !== undefined) return String(pendingProfile[k])
+    var p = activeProfile()
+    var z = (p && p.backlight) ? p.backlight[zoneKey] : null
+    return detectZoneEffect(z, fallback)
+  }
+
+  function backlightZoneTransparency(zoneKey, fallback) {
+    var k = "backlight." + zoneKey + ".transparency"
+    if (pendingProfile && pendingProfile[k] !== undefined) return Math.max(0, Math.min(100, Math.round(Number(pendingProfile[k]) || 0)))
+    var p = activeProfile()
+    var z = (p && p.backlight) ? p.backlight[zoneKey] : null
+    if (z && z.transparency !== undefined) {
+      var v = Number(z.transparency)
+      if (isFinite(v)) return Math.max(0, Math.min(100, Math.round(v)))
+    }
+    return fallback
+  }
+
+  function backlightZoneChannel(zoneKey, channel, fallback) {
+    // Channel range unconfirmed on firmware — assume 0-255 per RGB channel.
+    var k = "backlight." + zoneKey + "." + channel
+    if (pendingProfile && pendingProfile[k] !== undefined) return Math.max(0, Math.min(255, Math.round(Number(pendingProfile[k]) || 0)))
+    var p = activeProfile()
+    var z = (p && p.backlight) ? p.backlight[zoneKey] : null
+    var col = extractZoneColor(z)
+    return col[channel] !== undefined ? col[channel] : fallback
   }
 
   function buildSliderVariant(prevSlider, variant) {
@@ -309,13 +508,18 @@ Panel {
     if (typeof service.refresh === "function") service.refresh()
     if (typeof service.getSettings === "function") service.getSettings()
     if (typeof service.getProfileSettings === "function") service.getProfileSettings()
+    if (typeof service.getDeviceInfo === "function") service.getDeviceInfo()
   }
 
   function open() {
+    root.factoryResetConfirmed = false
     root.controller.show()
     root.pollService()
   }
-  function close() { root.controller.hide() }
+  function close() {
+    root.factoryResetConfirmed = false
+    root.controller.hide()
+  }
   function switchPanel(direction) {
     if (root.bar && typeof root.bar.switchPanelFrom === "function")
       return root.bar.switchPanelFrom(root.barIdentity, direction)
@@ -323,7 +527,10 @@ Panel {
   }
 
   onOpenedChanged: {
-    if (opened) root.pollService()
+    if (opened) {
+      root.factoryResetConfirmed = false
+      root.pollService()
+    }
   }
 
   Connections {
@@ -332,6 +539,7 @@ Panel {
       if (root.opened && root.connected) {
         if (typeof root.service.getSettings === "function") root.service.getSettings()
         if (typeof root.service.getProfileSettings === "function") root.service.getProfileSettings()
+        if (typeof root.service.getDeviceInfo === "function") root.service.getDeviceInfo()
       }
     }
   }
@@ -537,6 +745,228 @@ Panel {
     }
   }
 
+  component GlobalSliderRow: Column {
+    id: gsrow
+    property string label: ""
+    property string field: ""
+    property int minimum: 0
+    property int maximum: 100
+    property int step: 1
+    property int defaultValue: 0
+    property string valueText: String(currentValue)
+    readonly property int currentValue: root.numVal(field, defaultValue)
+    width: parent ? parent.width : implicitWidth
+    spacing: Style.space(6)
+    enabled: root.controlsEnabled
+    opacity: enabled ? 1.0 : 0.5
+
+    Row {
+      width: parent.width
+      spacing: Style.space(8)
+
+      Text {
+        width: parent.width - gsValueLabel.implicitWidth - parent.spacing
+        textFormat: Text.PlainText
+        text: gsrow.label
+        color: root.fg
+        font.family: root.fontFam
+        font.pixelSize: Style.font.body
+        font.bold: true
+        elide: Text.ElideRight
+      }
+
+      Text {
+        id: gsValueLabel
+        textFormat: Text.PlainText
+        text: gsrow.valueText
+        color: root.dim
+        font.family: root.fontFam
+        font.pixelSize: Style.font.bodySmall
+      }
+    }
+
+    PanelSlider {
+      width: parent.width
+      bar: root.bar
+      minimum: gsrow.minimum
+      maximum: gsrow.maximum
+      step: gsrow.step
+      integer: true
+      value: gsrow.currentValue
+      onReleased: function(v) {
+        if (!gsrow.enabled || gsrow.field === "") return
+        var snapped = Math.round(v / gsrow.step) * gsrow.step
+        snapped = Math.max(gsrow.minimum, Math.min(gsrow.maximum, snapped))
+        root.setField(gsrow.field, snapped)
+      }
+    }
+  }
+
+  component BacklightZoneControl: Column {
+    id: bzc
+    property string zoneKey: "keyboard"
+    property string title: "Keyboard zone"
+    property bool allowAurora: true
+    readonly property string effectValue: root.backlightZoneEffect(zoneKey, "solidColor")
+    readonly property int transparencyValue: root.backlightZoneTransparency(zoneKey, 0)
+    // Channel range unconfirmed on firmware — use 0-255 sliders for active solid/breathing color.
+    readonly property int redValue: root.backlightZoneChannel(zoneKey, "red", 255)
+    readonly property int greenValue: root.backlightZoneChannel(zoneKey, "green", 255)
+    readonly property int blueValue: root.backlightZoneChannel(zoneKey, "blue", 255)
+    readonly property bool hasColorChannels: effectValue === "solidColor" || effectValue === "breathing"
+    width: parent ? parent.width : implicitWidth
+    spacing: Style.space(6)
+    enabled: root.profileControlsEnabled
+    opacity: enabled ? 1.0 : 0.5
+
+    Text {
+      width: parent.width
+      textFormat: Text.PlainText
+      text: bzc.title + " effect"
+      color: root.fg
+      font.family: root.fontFam
+      font.pixelSize: Style.font.body
+      font.bold: true
+      elide: Text.ElideRight
+    }
+
+    ButtonGroup {
+      options: bzc.allowAurora ? root.backlightZoneOptionsWithAurora : root.backlightZoneOptionsSlider
+      value: bzc.effectValue
+      foreground: root.fg
+      accent: root.accentColor
+      fontFamily: root.fontFam
+      fontSize: Style.font.bodySmall
+      onChanged: function(v) {
+        if (!bzc.enabled || bzc.zoneKey === "") return
+        root.setProfileField("backlight." + bzc.zoneKey + ".effect", v)
+      }
+    }
+
+    Row {
+      width: parent.width
+      spacing: Style.space(8)
+
+      Text {
+        width: parent.width - trLabel.implicitWidth - parent.spacing
+        textFormat: Text.PlainText
+        text: bzc.title + " transparency"
+        color: root.fg
+        font.family: root.fontFam
+        font.pixelSize: Style.font.bodySmall
+        elide: Text.ElideRight
+      }
+
+      Text {
+        id: trLabel
+        textFormat: Text.PlainText
+        text: bzc.transparencyValue + "%"
+        color: root.dim
+        font.family: root.fontFam
+        font.pixelSize: Style.font.bodySmall
+      }
+    }
+
+    PanelSlider {
+      width: parent.width
+      bar: root.bar
+      minimum: 0
+      maximum: 100
+      step: 1
+      integer: true
+      value: bzc.transparencyValue
+      onReleased: function(v) {
+        if (!bzc.enabled || bzc.zoneKey === "") return
+        root.setProfileField("backlight." + bzc.zoneKey + ".transparency", Math.round(v))
+      }
+    }
+
+    Column {
+      width: parent.width
+      spacing: Style.space(4)
+      visible: bzc.hasColorChannels
+
+      Repeater {
+        model: [
+          { ch: "red", label: "R", val: bzc.redValue },
+          { ch: "green", label: "G", val: bzc.greenValue },
+          { ch: "blue", label: "B", val: bzc.blueValue }
+        ]
+        delegate: Row {
+          required property var modelData
+          width: parent ? parent.width : implicitWidth
+          spacing: Style.space(8)
+
+          Text {
+            width: Style.space(18)
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: modelData.label
+            color: root.dim
+            font.family: root.fontFam
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+
+          PanelSlider {
+            width: parent.width - Style.space(18) - chNumLabel.implicitWidth - parent.spacing * 2
+            anchors.verticalCenter: parent.verticalCenter
+            bar: root.bar
+            minimum: 0
+            maximum: 255
+            step: 1
+            integer: true
+            value: modelData.val
+            onReleased: function(v) {
+              if (!bzc.enabled || bzc.zoneKey === "") return
+              root.setProfileField("backlight." + bzc.zoneKey + "." + modelData.ch, Math.round(v))
+            }
+          }
+
+          Text {
+            id: chNumLabel
+            width: Style.space(28)
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignRight
+            textFormat: Text.PlainText
+            text: String(modelData.val)
+            color: root.dim
+            font.family: root.fontFam
+            font.pixelSize: Style.font.caption
+          }
+        }
+      }
+    }
+  }
+
+  component DeviceInfoRow: Row {
+    id: dirow
+    property string label: ""
+    property string valueText: "—"
+    width: parent ? parent.width : implicitWidth
+    spacing: Style.space(8)
+
+    Text {
+      width: parent.width - diVal.implicitWidth - parent.spacing
+      textFormat: Text.PlainText
+      text: dirow.label
+      color: root.dim
+      font.family: root.fontFam
+      font.pixelSize: Style.font.bodySmall
+      elide: Text.ElideRight
+    }
+
+    Text {
+      id: diVal
+      textFormat: Text.PlainText
+      text: dirow.valueText
+      color: root.fg
+      font.family: root.fontFam
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+    }
+  }
+
   KeyboardPanel {
     id: panel
     anchorItem: root.anchorItem
@@ -729,8 +1159,75 @@ Panel {
             foreground: root.fg
             fontFamily: root.fontFam
           }
+
           SectionNote {
-            text: "Brightness, effect mode, and auto-dim controls land in the next pass."
+            visible: !root.settingsReady || !root.profileReady
+            text: "Loading…"
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(8)
+
+            GlobalSliderRow {
+              label: "Brightness"
+              field: "brightness"
+              minimum: 0
+              maximum: 100
+              step: 1
+              defaultValue: 0
+              valueText: currentValue + "%"
+            }
+
+            TouchToggle {
+              label: "Eco brightness"
+              field: "ecoBrightness"
+              defaultValue: false
+            }
+
+            GlobalSliderRow {
+              label: "Backlight timeout"
+              field: "backlightTime"
+              minimum: 0
+              maximum: 900
+              step: 15
+              defaultValue: 300
+              valueText: root.formatBacklightTime(currentValue)
+            }
+
+            GlobalSliderRow {
+              label: "Idle dim timeout"
+              field: "idleBacklightTime"
+              minimum: 0
+              maximum: 300
+              step: 5
+              defaultValue: 30
+              valueText: root.formatIdleBacklightTime(currentValue)
+            }
+
+            BacklightZoneControl {
+              zoneKey: "keyboard"
+              title: "Keyboard"
+              allowAurora: true
+            }
+
+            BacklightZoneControl {
+              zoneKey: "touchpad"
+              title: "Touchpad"
+              allowAurora: true
+            }
+
+            BacklightZoneControl {
+              zoneKey: "leftSlider"
+              title: "Left slider"
+              allowAurora: false
+            }
+
+            BacklightZoneControl {
+              zoneKey: "rightSlider"
+              title: "Right slider"
+              allowAurora: false
+            }
           }
 
           PanelSeparator { width: parent.width; foreground: root.fg }
@@ -766,8 +1263,144 @@ Panel {
             foreground: root.fg
             fontFamily: root.fontFam
           }
+
           SectionNote {
-            text: "Linux OS mode, firmware version, and reset/restart controls land in the next pass."
+            visible: !root.deviceInfoReady
+            text: "Loading…"
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(8)
+
+            DeviceInfoRow {
+              label: "Device name"
+              valueText: (root.serverDeviceInfo && root.serverDeviceInfo.name) ? String(root.serverDeviceInfo.name) : "—"
+            }
+
+            DeviceInfoRow {
+              label: "Firmware version"
+              valueText: root.serverDeviceInfo ? root.formatFwVersion(root.serverDeviceInfo.fwVersion) : "—"
+            }
+
+            DeviceInfoRow {
+              label: "Serial number"
+              valueText: (root.serverDeviceInfo && root.serverDeviceInfo.serialNumber !== undefined) ? String(root.serverDeviceInfo.serialNumber) : "—"
+            }
+
+            DeviceInfoRow {
+              label: "Bar code"
+              valueText: (root.serverDeviceInfo && root.serverDeviceInfo.barCode) ? String(root.serverDeviceInfo.barCode) : "—"
+            }
+
+            DeviceInfoRow {
+              label: "Diagnostics"
+              valueText: "Not reported"
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(6)
+              enabled: root.connected
+              opacity: enabled ? 1.0 : 0.5
+
+              Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                text: "OS mode"
+                color: root.fg
+                font.family: root.fontFam
+                font.pixelSize: Style.font.body
+                font.bold: true
+                elide: Text.ElideRight
+              }
+
+              Row {
+                width: parent.width
+                spacing: Style.space(8)
+
+                ButtonGroup {
+                  options: root.osModeOptions
+                  value: root.selectedOsMode
+                  foreground: root.fg
+                  accent: root.accentColor
+                  fontFamily: root.fontFam
+                  fontSize: Style.font.bodySmall
+                  onChanged: function(v) {
+                    root.selectedOsMode = v
+                  }
+                }
+
+                Button {
+                  text: "Set OS mode"
+                  bordered: true
+                  focusable: true
+                  enabled: root.connected
+                  opacity: enabled ? 1.0 : 0.5
+                  foreground: root.fg
+                  accent: root.accentColor
+                  fontFamily: root.fontFam
+                  fontSize: Style.font.bodySmall
+                  onClicked: {
+                    if (!root.connected || !root.service || typeof root.service.setOsMode !== "function") return
+                    root.service.setOsMode(root.selectedOsMode || "LINUX")
+                  }
+                }
+              }
+            }
+
+            Button {
+              width: parent.width
+              text: "Restart keyboard"
+              bordered: true
+              focusable: true
+              enabled: root.connected
+              opacity: enabled ? 1.0 : 0.5
+              foreground: root.fg
+              accent: root.accentColor
+              fontFamily: root.fontFam
+              fontSize: Style.font.body
+              onClicked: {
+                if (!root.connected || !root.service || typeof root.service.restartDevice !== "function") return
+                root.service.restartDevice()
+              }
+            }
+
+            Toggle {
+              width: parent.width
+              label: "Confirm factory reset"
+              description: "Required before erasing device settings"
+              enabled: root.connected
+              opacity: enabled ? 1.0 : 0.5
+              foreground: root.fg
+              accent: Color.urgent
+              fontFamily: root.fontFam
+              titleSize: Style.font.body
+              checked: root.factoryResetConfirmed
+              onClicked: {
+                if (!root.connected) return
+                root.factoryResetConfirmed = !root.factoryResetConfirmed
+              }
+            }
+
+            Button {
+              width: parent.width
+              text: "Factory reset"
+              bordered: true
+              focusable: true
+              enabled: root.connected && root.factoryResetConfirmed
+              opacity: enabled ? 1.0 : 0.5
+              foreground: enabled ? Color.urgent : root.dim
+              accent: Color.urgent
+              fontFamily: root.fontFam
+              fontSize: Style.font.body
+              onClicked: {
+                if (!root.connected || !root.factoryResetConfirmed) return
+                if (!root.service || typeof root.service.factoryReset !== "function") return
+                root.factoryResetConfirmed = false
+                root.service.factoryReset(true)
+              }
+            }
           }
         }
       }
