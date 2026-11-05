@@ -143,19 +143,26 @@ func (p *ProfileSettings) Bytes() ([]byte, error) {
 	if original.ID != 0 {
 		return nil, fmt.Errorf("proto: unsupported original profile id %d", original.ID)
 	}
-	// A raw-only request remains valid for transport tooling.
+	current := p
+	// Raw-only restores still pass through the same merge and pinning path as
+	// typed edits. Decode a second view so the original remains unchanged for
+	// equality checks and unknown-field preservation.
 	if p.Gestures == nil && p.TouchZone == nil && p.Backlight == nil && p.Keyboard == nil {
-		return append([]byte(nil), p.Raw...), nil
+		current, err = DecodeProfile(p.Raw)
+		if err != nil {
+			return nil, fmt.Errorf("proto: decode raw profile restore: %w", err)
+		}
 	}
-	inheritRawBytes(p, original)
-	unchanged, err := decodedEqual(p, original)
+	inheritRawBytes(current, original)
+	pinInteractiveAnimationColors(current.Backlight)
+	unchanged, err := decodedEqual(current, original)
 	if err != nil {
 		return nil, err
 	}
 	if unchanged {
 		return append([]byte(nil), p.Raw...), nil
 	}
-	encoded, err := encodeProfile(p, original)
+	encoded, err := encodeProfile(current, original)
 	if err != nil {
 		return nil, err
 	}

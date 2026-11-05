@@ -119,6 +119,32 @@ type SliderInteractiveAnimation struct {
 	Enable *bool `json:"enable,omitempty"`
 }
 
+// pinInteractiveAnimationColors enforces the global typing- and glide-trace
+// colors without creating animations or changing any other animation setting.
+func pinInteractiveAnimationColors(b *BacklightSettings) {
+	if b == nil {
+		return
+	}
+	if b.Keyboard != nil && b.Keyboard.InteractiveAnimation != nil {
+		a := b.Keyboard.InteractiveAnimation
+		a.Color = pinnedActionColor(a.Color, 0, 0, 255)
+	}
+	if b.Touchpad != nil && b.Touchpad.InteractiveAnimation != nil {
+		a := b.Touchpad.InteractiveAnimation
+		a.Color = pinnedActionColor(a.Color, 0, 255, 0)
+	}
+}
+
+func pinnedActionColor(color *Color, red, green, blue uint64) *Color {
+	if color == nil {
+		color = &Color{}
+	}
+	color.Red = uint32Ptr(red)
+	color.Green = uint32Ptr(green)
+	color.Blue = uint32Ptr(blue)
+	return color
+}
+
 // DecodeBacklight parses backlight settings while preserving the original bytes.
 func DecodeBacklight(pb []byte) (*BacklightSettings, error) {
 	b := &BacklightSettings{RawBytes: rawBytes(pb)}
