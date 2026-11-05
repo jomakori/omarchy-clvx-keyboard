@@ -190,7 +190,7 @@ Panel {
     localProfile = next
   }
 
-  function activeProfile() {
+  function workingProfile() {
     return localProfile || serverProfile
   }
 
@@ -340,7 +340,7 @@ Panel {
   function backlightZoneEffect(zoneKey, fallback) {
     var k = "backlight." + zoneKey + ".effect"
     if (pendingProfile && pendingProfile[k] !== undefined) return String(pendingProfile[k])
-    var p = activeProfile()
+    var p = workingProfile()
     var z = (p && p.backlight) ? p.backlight[zoneKey] : null
     return detectZoneEffect(z, fallback)
   }
@@ -348,7 +348,7 @@ Panel {
   function backlightZoneTransparency(zoneKey, fallback) {
     var k = "backlight." + zoneKey + ".transparency"
     if (pendingProfile && pendingProfile[k] !== undefined) return Math.max(0, Math.min(100, Math.round(Number(pendingProfile[k]) || 0)))
-    var p = activeProfile()
+    var p = workingProfile()
     var z = (p && p.backlight) ? p.backlight[zoneKey] : null
     if (z && z.transparency !== undefined) {
       var v = Number(z.transparency)
@@ -361,7 +361,7 @@ Panel {
     // Channel range unconfirmed on firmware — assume 0-255 per RGB channel.
     var k = "backlight." + zoneKey + "." + channel
     if (pendingProfile && pendingProfile[k] !== undefined) return Math.max(0, Math.min(255, Math.round(Number(pendingProfile[k]) || 0)))
-    var p = activeProfile()
+    var p = workingProfile()
     var z = (p && p.backlight) ? p.backlight[zoneKey] : null
     var col = extractZoneColor(z)
     return col[channel] !== undefined ? col[channel] : fallback
@@ -417,7 +417,7 @@ Panel {
   function touchpadBool(field, fallback) {
     var k = "touchpad." + field
     if (pendingProfile && pendingProfile[k] !== undefined) return pendingProfile[k] === true
-    var p = activeProfile()
+    var p = workingProfile()
     if (p && p.touchZone && p.touchZone.touchpad && p.touchZone.touchpad[field] !== undefined)
       return p.touchZone.touchpad[field] === true
     return fallback
@@ -426,7 +426,7 @@ Panel {
   function sliderSensitivity(side, fallback) {
     var k = "slider." + side + ".sensitivity"
     if (pendingProfile && pendingProfile[k] !== undefined) return Number(pendingProfile[k])
-    var p = activeProfile()
+    var p = workingProfile()
     if (p && p.touchZone && p.touchZone.slider && p.touchZone.slider[side]
         && p.touchZone.slider[side].sensitivity !== undefined) {
       var v = Number(p.touchZone.slider[side].sensitivity)
@@ -438,7 +438,7 @@ Panel {
   function sliderBehavior(side, fallback) {
     var k = "slider." + side + ".behavior"
     if (pendingProfile && pendingProfile[k] !== undefined) return String(pendingProfile[k])
-    var p = activeProfile()
+    var p = workingProfile()
     var s = (p && p.touchZone && p.touchZone.slider) ? p.touchZone.slider[side] : null
     if (s && typeof s === "object") {
       if (s.customShortcut !== undefined && s.customShortcut !== null) return "customShortcut"
@@ -453,7 +453,7 @@ Panel {
   function fKeyBehavior(keyName, fallback) {
     var k = "fKey." + keyName
     if (pendingProfile && pendingProfile[k] !== undefined) return String(pendingProfile[k])
-    var p = activeProfile()
+    var p = workingProfile()
     var a = (p && p.keyboard && p.keyboard.fKey) ? p.keyboard.fKey[keyName] : null
     if (a && typeof a === "object") {
       if (a.customShortcut !== undefined && a.customShortcut !== null) return "customShortcut"
