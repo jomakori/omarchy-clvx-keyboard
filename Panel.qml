@@ -735,41 +735,95 @@ Panel {
     property string zoneKey: "keyboard"
     property string labelText: "Keyboard"
     property string subText: ""
+    property int labelAlignment: Qt.AlignVCenter
+    property int labelTopMargin: Style.space(6)
+    property bool showSliderTicks: false
     readonly property bool isSelected: root.selectedBacklightZone === zoneKey
-    readonly property bool isHot: blockMouse.containsMouse
-    readonly property color zoneDotColor: Qt.rgba(
-      root.backlightZoneChannel(zoneKey, "red", 255) / 255,
-      root.backlightZoneChannel(zoneKey, "green", 255) / 255,
-      root.backlightZoneChannel(zoneKey, "blue", 255) / 255,
+    readonly property bool mouseHovered: blockMouse.containsMouse
+    property bool isHot: mouseHovered
+    readonly property int zoneRed: root.backlightZoneChannel(zoneKey, "red", 255)
+    readonly property int zoneGreen: root.backlightZoneChannel(zoneKey, "green", 255)
+    readonly property int zoneBlue: root.backlightZoneChannel(zoneKey, "blue", 255)
+    readonly property color liveZoneColor: Qt.rgba(
+      zoneRed / 255,
+      zoneGreen / 255,
+      zoneBlue / 255,
       1.0
     )
+    readonly property real washAlpha: isSelected ? 0.42 : (isHot ? 0.30 : 0.20)
 
-    radius: Style.cornerRadius
-    color: isSelected
-      ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, Style.selectedFillAlpha)
-      : (isHot
-          ? Style.hoverFillFor(root.fg, root.accentColor)
-          : Style.normalFillFor(root.fg, root.accentColor))
+    radius: Math.max(Style.space(5), Style.cornerRadius)
+    color: Color.popups.background
     borderSpec: isSelected
-      ? Border.flat(root.accentColor, Math.max(1, Style.space(2)))
+      ? Border.flat(root.accentColor, Math.max(2, Style.space(2)))
       : (isHot
           ? Border.flat(Style.hoverBorderFor(root.fg, root.accentColor), Math.max(1, Style.normalBorderWidth))
-          : Border.flat(Style.normalBorderFor(root.fg, root.accentColor), Math.max(1, Style.normalBorderWidth)))
+          : Border.flat(Qt.rgba(liveZoneColor.r, liveZoneColor.g, liveZoneColor.b, 0.42), Math.max(1, Style.normalBorderWidth)))
 
-    Behavior on color { ColorAnimation { duration: 110 } }
+    // Live zone color wash (brighter when selected, dimmed slightly when unselected)
+    Rectangle {
+      anchors.fill: parent
+      anchors.margins: zmb.isSelected ? Math.max(2, Style.space(2)) : 1
+      radius: Math.max(1, zmb.radius - (zmb.isSelected ? Math.max(2, Style.space(2)) : 1))
+      color: Qt.rgba(zmb.liveZoneColor.r, zmb.liveZoneColor.g, zmb.liveZoneColor.b, zmb.washAlpha)
+
+      Behavior on color { ColorAnimation { duration: 110 } }
+    }
+
+    // Subtle slider strip end ticks when used as a slider strip
+    Row {
+      visible: zmb.showSliderTicks
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(6)
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(2)
+      z: 1
+
+      Repeater {
+        model: 3
+        delegate: Rectangle {
+          width: 1
+          height: Style.space(8)
+          color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
+        }
+      }
+    }
 
     Row {
-      anchors.centerIn: parent
+      visible: zmb.showSliderTicks
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(6)
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(2)
+      z: 1
+
+      Repeater {
+        model: 3
+        delegate: Rectangle {
+          width: 1
+          height: Style.space(8)
+          color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
+        }
+      }
+    }
+
+    Row {
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.verticalCenter: zmb.labelAlignment === Qt.AlignVCenter ? parent.verticalCenter : undefined
+      anchors.top: zmb.labelAlignment === Qt.AlignTop ? parent.top : undefined
+      anchors.topMargin: zmb.labelAlignment === Qt.AlignTop ? zmb.labelTopMargin : 0
       spacing: Style.space(5)
+      z: 2
 
       Rectangle {
         width: Style.space(7)
         height: Style.space(7)
         radius: width / 2
         anchors.verticalCenter: parent.verticalCenter
-        color: zmb.zoneDotColor
+        color: zmb.liveZoneColor
+        opacity: zmb.isSelected ? 1.0 : 0.72
         border.width: 1
-        border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.28)
+        border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.32)
       }
 
       Text {
@@ -777,6 +831,7 @@ Panel {
         textFormat: Text.PlainText
         text: zmb.labelText
         color: zmb.isSelected ? root.accentColor : root.fg
+        opacity: zmb.isSelected ? 1.0 : 0.85
         font.family: root.fontFam
         font.pixelSize: Style.font.caption
         font.bold: zmb.isSelected
@@ -790,13 +845,14 @@ Panel {
         color: zmb.isSelected ? root.accentColor : root.dim
         font.family: root.fontFam
         font.pixelSize: Style.font.caption
-        opacity: zmb.isSelected ? 0.9 : 0.75
+        opacity: zmb.isSelected ? 0.92 : 0.75
       }
     }
 
     MouseArea {
       id: blockMouse
       anchors.fill: parent
+      z: 2
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: {
@@ -821,54 +877,107 @@ Panel {
     enabled: root.profileControlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
-    // Hardware zone map: wide keyboard block, touchpad block, two thin slider strips
+    // Top-view keyboard illustration: wide rounded body, left/right slider strips
+    // on top, keyboard deck with live wash below, and centered touchpad rectangle.
     BorderSurface {
+      id: keyboardBody
       width: parent.width
-      implicitHeight: mapColumn.implicitHeight + Style.space(10)
-      padding: Style.space(5)
-      radius: Style.cornerRadius
+      implicitHeight: mapColumn.implicitHeight + Style.space(14)
+      padding: Style.space(7)
+      radius: Math.max(Style.space(8), Style.cornerRadius)
       color: Style.normalFillFor(root.fg, root.accentColor)
       borderSpec: Border.flat(Style.normalBorderFor(root.fg, root.accentColor), Math.max(1, Style.normalBorderWidth))
 
       Column {
         id: mapColumn
-        x: Style.space(5)
-        y: Style.space(5)
-        width: parent.width - Style.space(10)
-        spacing: Style.space(4)
+        x: Style.space(7)
+        y: Style.space(7)
+        width: parent.width - Style.space(14)
+        spacing: Style.space(5)
 
-        ZoneMapBlock {
-          width: parent.width
-          height: Style.space(26)
-          zoneKey: "keyboard"
-          labelText: "Keyboard"
-          subText: "Background"
-        }
-
-        ZoneMapBlock {
-          width: parent.width
-          height: Style.space(24)
-          zoneKey: "touchpad"
-          labelText: "Touchpad"
-          subText: "Touch Area"
-        }
-
+        // Top row: Left & Right touch slider strips above the keyboard area
         Row {
           width: parent.width
-          spacing: Style.space(4)
+          spacing: Style.space(6)
 
           ZoneMapBlock {
             width: Math.floor((parent.width - parent.spacing) / 2)
-            height: Style.space(20)
+            height: Style.space(22)
+            radius: Math.max(Style.space(4), Math.round(Style.cornerRadius * 0.6))
             zoneKey: "leftSlider"
             labelText: "Left Slider"
+            showSliderTicks: true
           }
 
           ZoneMapBlock {
             width: parent.width - Math.floor((parent.width - parent.spacing) / 2) - parent.spacing
-            height: Style.space(20)
+            height: Style.space(22)
+            radius: Math.max(Style.space(4), Math.round(Style.cornerRadius * 0.6))
             zoneKey: "rightSlider"
             labelText: "Right Slider"
+            showSliderTicks: true
+          }
+        }
+
+        // Main keyboard deck with subtle keycap grid and centered touchpad overlay
+        ZoneMapBlock {
+          id: keyboardDeck
+          width: parent.width
+          height: Style.space(76)
+          radius: Math.max(Style.space(6), Math.round(Style.cornerRadius * 0.8))
+          zoneKey: "keyboard"
+          labelText: "Keyboard"
+          subText: "Background"
+          labelAlignment: Qt.AlignTop
+          labelTopMargin: Style.space(6)
+          isHot: mouseHovered && !touchpadZone.mouseHovered
+
+          // Faint keycap grid texture across the keyboard deck
+          Column {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(6)
+            anchors.rightMargin: Style.space(6)
+            anchors.topMargin: Style.space(24)
+            anchors.bottomMargin: Style.space(6)
+            spacing: Style.space(3)
+            z: 1
+
+            Repeater {
+              model: 3
+              delegate: Row {
+                width: parent.width
+                height: Style.space(12)
+                spacing: Style.space(3)
+                readonly property int keyCount: 10
+
+                Repeater {
+                  model: parent.keyCount
+                  delegate: Rectangle {
+                    width: Math.max(Style.space(8), Math.floor((parent.width - (parent.keyCount - 1) * parent.spacing) / parent.keyCount))
+                    height: parent.height
+                    radius: Style.space(2)
+                    color: "transparent"
+                    border.width: 1
+                    border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.10)
+                  }
+                }
+              }
+            }
+          }
+
+          // Centered touchpad zone sitting inside the keyboard deck
+          ZoneMapBlock {
+            id: touchpadZone
+            width: Math.round(parent.width * 0.64)
+            height: Style.space(40)
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Style.space(6)
+            radius: Math.max(Style.space(4), Math.round(Style.cornerRadius * 0.6))
+            zoneKey: "touchpad"
+            labelText: "Touchpad"
+            subText: "Touch Area"
+            z: 3
           }
         }
       }
