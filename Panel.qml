@@ -138,37 +138,37 @@ Panel {
 
   readonly property var fKeyList: ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
   readonly property var sliderBehaviorOptions: [
-    { value: "predefinedShortcut", label: "Touchpad default" },
-    { value: "custom", label: "Custom brightness" },
-    { value: "nothing", label: "Nothing" },
-    { value: "asGlobal", label: "Global" },
-    { value: "customShortcut", label: "Custom shortcut" }
+    { value: "predefinedShortcut", label: "Def" },
+    { value: "custom", label: "Bright" },
+    { value: "nothing", label: "Off" },
+    { value: "asGlobal", label: "Glob" },
+    { value: "customShortcut", label: "Key" }
   ]
   readonly property var fKeyBehaviorOptions: [
-    { value: "customShortcut", label: "Custom shortcut" },
-    { value: "predefinedShortcut", label: "Predefined" },
-    { value: "custom", label: "Custom" },
-    { value: "nothing", label: "Nothing" },
-    { value: "asGlobal", label: "Global" }
+    { value: "customShortcut", label: "Key" },
+    { value: "predefinedShortcut", label: "Preset" },
+    { value: "custom", label: "Cust" },
+    { value: "nothing", label: "Off" },
+    { value: "asGlobal", label: "Glob" }
   ]
   readonly property var backlightZoneOptionsWithAurora: [
     { value: "solidColor", label: "Solid" },
-    { value: "breathing", label: "Breathing" },
+    { value: "breathing", label: "Pulse" },
     { value: "colorCycle", label: "Cycle" },
     { value: "colorWave", label: "Wave" },
-    { value: "aurora", label: "Aurora" },
-    { value: "interactiveAnimation", label: "Interactive" }
+    { value: "aurora", label: "Aura" },
+    { value: "interactiveAnimation", label: "Touch" }
   ]
   readonly property var backlightZoneOptionsSlider: [
     { value: "solidColor", label: "Solid" },
-    { value: "breathing", label: "Breathing" },
+    { value: "breathing", label: "Pulse" },
     { value: "colorCycle", label: "Cycle" },
     { value: "colorWave", label: "Wave" },
-    { value: "interactiveAnimation", label: "Interactive" }
+    { value: "interactiveAnimation", label: "Touch" }
   ]
   readonly property var osModeOptions: [
     { value: "LINUX", label: "Linux" },
-    { value: "WINDOWS", label: "Windows" },
+    { value: "WINDOWS", label: "Win" },
     { value: "MAC", label: "Mac" },
     { value: "IPAD", label: "iPad" }
   ]
@@ -553,20 +553,53 @@ Panel {
     wrapMode: Text.WordWrap
   }
 
-  component TouchToggle: Toggle {
+  component TouchToggle: Item {
+    id: tt
+    property string label: ""
     property string field: ""
     property bool defaultValue: false
     width: parent ? parent.width : implicitWidth
+    implicitHeight: Math.max(Style.spacing.controlHeight, ttSwitch.implicitHeight)
     enabled: root.controlsEnabled
     opacity: enabled ? 1.0 : 0.5
-    foreground: root.fg
-    accent: root.accentColor
-    fontFamily: root.fontFam
-    titleSize: Style.font.body
-    checked: root.boolVal(field, defaultValue)
-    onClicked: {
-      if (!enabled || field === "") return
-      root.setField(field, !root.boolVal(field, defaultValue))
+
+    function toggleField() {
+      if (!tt.enabled || tt.field === "") return
+      root.setField(tt.field, !root.boolVal(tt.field, tt.defaultValue))
+    }
+
+    Text {
+      anchors.left: parent.left
+      anchors.right: ttSwitch.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      textFormat: Text.PlainText
+      text: tt.label
+      color: root.fg
+      font.family: root.fontFam
+      font.pixelSize: Style.font.bodySmall
+      elide: Text.ElideRight
+
+      MouseArea {
+        anchors.fill: parent
+        enabled: tt.enabled
+        cursorShape: Qt.PointingHandCursor
+        onClicked: tt.toggleField()
+      }
+    }
+
+    ToggleSwitch {
+      id: ttSwitch
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      trackHeight: Math.max(18, Math.round(Style.spacing.controlHeight * 0.5))
+      cursorPad: Style.space(3)
+      checked: root.boolVal(tt.field, tt.defaultValue)
+      busy: !tt.enabled
+      interactive: tt.enabled
+      foreground: root.fg
+      accent: root.accentColor
+      onToggled: tt.toggleField()
     }
   }
 
@@ -577,49 +610,90 @@ Panel {
     property string defaultValue: ""
     property var options: []
     width: parent ? parent.width : implicitWidth
-    spacing: Style.space(6)
+    spacing: Style.space(2)
     enabled: root.controlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
-    Text {
+    Row {
       width: parent.width
-      textFormat: Text.PlainText
-      text: crow.label
-      color: root.fg
-      font.family: root.fontFam
-      font.pixelSize: Style.font.body
-      font.bold: true
-      elide: Text.ElideRight
-    }
+      spacing: Style.space(6)
 
-    ButtonGroup {
-      options: crow.options
-      value: root.strVal(crow.field, crow.defaultValue)
-      foreground: root.fg
-      accent: root.accentColor
-      fontFamily: root.fontFam
-      fontSize: Style.font.bodySmall
-      onChanged: function(v) {
-        if (!crow.enabled || crow.field === "") return
-        root.setField(crow.field, v)
+      Text {
+        width: parent.width - crowGroup.implicitWidth - parent.spacing
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: crow.label
+        color: root.fg
+        font.family: root.fontFam
+        font.pixelSize: Style.font.bodySmall
+        elide: Text.ElideRight
+      }
+
+      ButtonGroup {
+        id: crowGroup
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(4)
+        options: crow.options
+        value: root.strVal(crow.field, crow.defaultValue)
+        foreground: root.fg
+        accent: root.accentColor
+        fontFamily: root.fontFam
+        fontSize: Style.font.caption
+        onChanged: function(v) {
+          if (!crow.enabled || crow.field === "") return
+          root.setField(crow.field, v)
+        }
       }
     }
   }
 
-  component TouchpadZoneToggle: Toggle {
+  component TouchpadZoneToggle: Item {
+    id: tzt
+    property string label: ""
     property string field: ""
     property bool defaultValue: true
     width: parent ? parent.width : implicitWidth
+    implicitHeight: Math.max(Style.spacing.controlHeight, tztSwitch.implicitHeight)
     enabled: root.profileControlsEnabled
     opacity: enabled ? 1.0 : 0.5
-    foreground: root.fg
-    accent: root.accentColor
-    fontFamily: root.fontFam
-    titleSize: Style.font.body
-    checked: root.touchpadBool(field, defaultValue)
-    onClicked: {
-      if (!enabled || field === "") return
-      root.setProfileField("touchpad." + field, !root.touchpadBool(field, defaultValue))
+
+    function toggleZoneField() {
+      if (!tzt.enabled || tzt.field === "") return
+      root.setProfileField("touchpad." + tzt.field, !root.touchpadBool(tzt.field, tzt.defaultValue))
+    }
+
+    Text {
+      anchors.left: parent.left
+      anchors.right: tztSwitch.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      textFormat: Text.PlainText
+      text: tzt.label
+      color: root.fg
+      font.family: root.fontFam
+      font.pixelSize: Style.font.bodySmall
+      elide: Text.ElideRight
+
+      MouseArea {
+        anchors.fill: parent
+        enabled: tzt.enabled
+        cursorShape: Qt.PointingHandCursor
+        onClicked: tzt.toggleZoneField()
+      }
+    }
+
+    ToggleSwitch {
+      id: tztSwitch
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      trackHeight: Math.max(18, Math.round(Style.spacing.controlHeight * 0.5))
+      cursorPad: Style.space(3)
+      checked: root.touchpadBool(tzt.field, tzt.defaultValue)
+      busy: !tzt.enabled
+      interactive: tzt.enabled
+      foreground: root.fg
+      accent: root.accentColor
+      onToggled: tzt.toggleZoneField()
     }
   }
 
@@ -631,13 +705,13 @@ Panel {
     readonly property string behaviorValue: root.sliderBehavior(side, "nothing")
     readonly property bool isShortcutVariant: behaviorValue === "customShortcut" || behaviorValue === "predefinedShortcut"
     width: parent ? parent.width : implicitWidth
-    spacing: Style.space(6)
+    spacing: Style.space(3)
     enabled: root.profileControlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
     Row {
       width: parent.width
-      spacing: Style.space(8)
+      spacing: Style.space(6)
 
       Text {
         width: parent.width - sensLabel.implicitWidth - parent.spacing
@@ -645,8 +719,7 @@ Panel {
         text: szc.title + " sensitivity"
         color: root.fg
         font.family: root.fontFam
-        font.pixelSize: Style.font.body
-        font.bold: true
+        font.pixelSize: Style.font.bodySmall
         elide: Text.ElideRight
       }
 
@@ -656,12 +729,14 @@ Panel {
         text: String(szc.sensValue)
         color: root.dim
         font.family: root.fontFam
-        font.pixelSize: Style.font.bodySmall
+        font.pixelSize: Style.font.caption
       }
     }
 
     PanelSlider {
       width: parent.width
+      implicitHeight: Style.space(18)
+      knobSize: Math.max(12, Math.round(Style.spacing.controlHeight * 0.32))
       bar: root.bar
       minimum: 1
       maximum: 5
@@ -679,20 +754,21 @@ Panel {
       width: parent.width
       textFormat: Text.PlainText
       text: szc.title + " behavior"
-      color: root.fg
+      color: root.dim
       font.family: root.fontFam
-      font.pixelSize: Style.font.body
+      font.pixelSize: Style.font.caption
       font.bold: true
       elide: Text.ElideRight
     }
 
     ButtonGroup {
+      spacing: Style.space(4)
       options: root.sliderBehaviorOptions
       value: szc.behaviorValue
       foreground: root.fg
       accent: root.accentColor
       fontFamily: root.fontFam
-      fontSize: Style.font.bodySmall
+      fontSize: Style.font.caption
       onChanged: function(v) {
         if (!szc.enabled) return
         root.setProfileField("slider." + szc.side + ".behavior", v)
@@ -711,7 +787,7 @@ Panel {
     readonly property string behaviorValue: root.fKeyBehavior(keyName, "asGlobal")
     readonly property bool isShortcutVariant: behaviorValue === "customShortcut" || behaviorValue === "predefinedShortcut"
     width: parent ? parent.width : implicitWidth
-    spacing: Style.space(6)
+    spacing: Style.space(2)
     enabled: root.profileControlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
@@ -719,20 +795,21 @@ Panel {
       width: parent.width
       textFormat: Text.PlainText
       text: fkrow.keyName
-      color: root.fg
+      color: root.dim
       font.family: root.fontFam
-      font.pixelSize: Style.font.body
+      font.pixelSize: Style.font.caption
       font.bold: true
       elide: Text.ElideRight
     }
 
     ButtonGroup {
+      spacing: Style.space(4)
       options: root.fKeyBehaviorOptions
       value: fkrow.behaviorValue
       foreground: root.fg
       accent: root.accentColor
       fontFamily: root.fontFam
-      fontSize: Style.font.bodySmall
+      fontSize: Style.font.caption
       onChanged: function(v) {
         if (!fkrow.enabled || fkrow.keyName === "") return
         root.setProfileField("fKey." + fkrow.keyName, v)
@@ -756,13 +833,13 @@ Panel {
     property string valueText: String(currentValue)
     readonly property int currentValue: root.numVal(field, defaultValue)
     width: parent ? parent.width : implicitWidth
-    spacing: Style.space(6)
+    spacing: Style.space(2)
     enabled: root.controlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
     Row {
       width: parent.width
-      spacing: Style.space(8)
+      spacing: Style.space(6)
 
       Text {
         width: parent.width - gsValueLabel.implicitWidth - parent.spacing
@@ -770,8 +847,7 @@ Panel {
         text: gsrow.label
         color: root.fg
         font.family: root.fontFam
-        font.pixelSize: Style.font.body
-        font.bold: true
+        font.pixelSize: Style.font.bodySmall
         elide: Text.ElideRight
       }
 
@@ -781,12 +857,15 @@ Panel {
         text: gsrow.valueText
         color: root.dim
         font.family: root.fontFam
-        font.pixelSize: Style.font.bodySmall
+        font.pixelSize: Style.font.caption
       }
     }
 
     PanelSlider {
       width: parent.width
+      implicitHeight: Style.space(18)
+      knobSize: Math.max(12, Math.round(Style.spacing.controlHeight * 0.32))
+      tickCount: 0
       bar: root.bar
       minimum: gsrow.minimum
       maximum: gsrow.maximum
@@ -815,7 +894,7 @@ Panel {
     readonly property int blueValue: root.backlightZoneChannel(zoneKey, "blue", 255)
     readonly property bool hasColorChannels: effectValue === "solidColor" || effectValue === "breathing"
     width: parent ? parent.width : implicitWidth
-    spacing: Style.space(6)
+    spacing: Style.space(3)
     enabled: root.profileControlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
@@ -823,20 +902,21 @@ Panel {
       width: parent.width
       textFormat: Text.PlainText
       text: bzc.title + " effect"
-      color: root.fg
+      color: root.dim
       font.family: root.fontFam
-      font.pixelSize: Style.font.body
+      font.pixelSize: Style.font.caption
       font.bold: true
       elide: Text.ElideRight
     }
 
     ButtonGroup {
+      spacing: Style.space(4)
       options: bzc.allowAurora ? root.backlightZoneOptionsWithAurora : root.backlightZoneOptionsSlider
       value: bzc.effectValue
       foreground: root.fg
       accent: root.accentColor
       fontFamily: root.fontFam
-      fontSize: Style.font.bodySmall
+      fontSize: Style.font.caption
       onChanged: function(v) {
         if (!bzc.enabled || bzc.zoneKey === "") return
         root.setProfileField("backlight." + bzc.zoneKey + ".effect", v)
@@ -845,7 +925,7 @@ Panel {
 
     Row {
       width: parent.width
-      spacing: Style.space(8)
+      spacing: Style.space(6)
 
       Text {
         width: parent.width - trLabel.implicitWidth - parent.spacing
@@ -863,12 +943,15 @@ Panel {
         text: bzc.transparencyValue + "%"
         color: root.dim
         font.family: root.fontFam
-        font.pixelSize: Style.font.bodySmall
+        font.pixelSize: Style.font.caption
       }
     }
 
     PanelSlider {
       width: parent.width
+      implicitHeight: Style.space(18)
+      knobSize: Math.max(12, Math.round(Style.spacing.controlHeight * 0.32))
+      tickCount: 0
       bar: root.bar
       minimum: 0
       maximum: 100
@@ -883,7 +966,7 @@ Panel {
 
     Column {
       width: parent.width
-      spacing: Style.space(4)
+      spacing: Style.space(2)
       visible: bzc.hasColorChannels
 
       Repeater {
@@ -895,10 +978,10 @@ Panel {
         delegate: Row {
           required property var modelData
           width: parent ? parent.width : implicitWidth
-          spacing: Style.space(8)
+          spacing: Style.space(6)
 
           Text {
-            width: Style.space(18)
+            width: Style.space(14)
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
             text: modelData.label
@@ -909,7 +992,10 @@ Panel {
           }
 
           PanelSlider {
-            width: parent.width - Style.space(18) - chNumLabel.implicitWidth - parent.spacing * 2
+            width: parent.width - Style.space(14) - chNumLabel.width - parent.spacing * 2
+            implicitHeight: Style.space(16)
+            knobSize: Math.max(11, Math.round(Style.spacing.controlHeight * 0.3))
+            tickCount: 0
             anchors.verticalCenter: parent.verticalCenter
             bar: root.bar
             minimum: 0
@@ -925,7 +1011,7 @@ Panel {
 
           Text {
             id: chNumLabel
-            width: Style.space(28)
+            width: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             textFormat: Text.PlainText
@@ -939,31 +1025,40 @@ Panel {
     }
   }
 
-  component DeviceInfoRow: Row {
+  component DeviceInfoRow: Item {
     id: dirow
     property string label: ""
     property string valueText: "—"
     width: parent ? parent.width : implicitWidth
-    spacing: Style.space(8)
+    implicitHeight: Math.max(diLbl.implicitHeight, diVal.implicitHeight)
 
     Text {
-      width: parent.width - diVal.implicitWidth - parent.spacing
+      id: diLbl
+      anchors.left: parent.left
+      anchors.right: diVal.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
       text: dirow.label
       color: root.dim
       font.family: root.fontFam
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.caption
       elide: Text.ElideRight
     }
 
     Text {
       id: diVal
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      width: Math.min(implicitWidth, Math.round(parent.width * 0.62))
+      horizontalAlignment: Text.AlignRight
       textFormat: Text.PlainText
       text: dirow.valueText
       color: root.fg
       font.family: root.fontFam
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.caption
       font.bold: true
+      elide: Text.ElideRight
     }
   }
 
@@ -974,8 +1069,11 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(360))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
+    contentWidth: panel.fittedContentWidth(Style.space(300))
+    contentHeight: panel.fittedContentHeight(
+      column.implicitHeight,
+      panel.screenH > 0 ? Math.min(Style.space(520), Math.round(panel.screenH * 0.7)) : Style.space(520)
+    )
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -998,7 +1096,7 @@ Panel {
         Column {
           id: column
           width: scrollArea.availableWidth
-          spacing: Style.space(14)
+          spacing: Style.space(8)
 
           PanelHero {
             title: "CLVX Keyboard"
@@ -1021,20 +1119,20 @@ Panel {
 
           PanelSeparator { width: parent.width; foreground: root.fg }
 
-          PanelSectionHeader {
-            text: "Touch"
-            foreground: root.fg
-            fontFamily: root.fontFam
-          }
-
-          SectionNote {
-            visible: !root.settingsReady
-            text: "Loading…"
-          }
-
           Column {
             width: parent.width
-            spacing: Style.space(8)
+            spacing: Style.space(4)
+
+            PanelSectionHeader {
+              text: "Touch"
+              foreground: root.fg
+              fontFamily: root.fontFam
+            }
+
+            SectionNote {
+              visible: !root.settingsReady
+              text: "Loading…"
+            }
 
             TouchToggle {
               label: "Single-finger tap clicks"
@@ -1047,8 +1145,8 @@ Panel {
               field: "tap1fMouseButton"
               defaultValue: "LEFT_BUTTON"
               options: [
-                { value: "LEFT_BUTTON", label: "Left click" },
-                { value: "RIGHT_BUTTON", label: "Right click" }
+                { value: "LEFT_BUTTON", label: "Left" },
+                { value: "RIGHT_BUTTON", label: "Right" }
               ]
             }
 
@@ -1101,27 +1199,27 @@ Panel {
               options: [
                 { value: "LEFT", label: "Left" },
                 { value: "RIGHT", label: "Right" },
-                { value: "UNSELECTED", label: "Unselected" }
+                { value: "UNSELECTED", label: "Auto" }
               ]
             }
           }
 
           PanelSeparator { width: parent.width; foreground: root.fg }
 
-          PanelSectionHeader {
-            text: "Sliders & zones"
-            foreground: root.fg
-            fontFamily: root.fontFam
-          }
-
-          SectionNote {
-            visible: !root.profileReady
-            text: "Loading…"
-          }
-
           Column {
             width: parent.width
-            spacing: Style.space(8)
+            spacing: Style.space(4)
+
+            PanelSectionHeader {
+              text: "Sliders & zones"
+              foreground: root.fg
+              fontFamily: root.fontFam
+            }
+
+            SectionNote {
+              visible: !root.profileReady
+              text: "Loading…"
+            }
 
             TouchpadZoneToggle {
               label: "Touchpad zone enabled"
@@ -1154,20 +1252,20 @@ Panel {
 
           PanelSeparator { width: parent.width; foreground: root.fg }
 
-          PanelSectionHeader {
-            text: "Backlight"
-            foreground: root.fg
-            fontFamily: root.fontFam
-          }
-
-          SectionNote {
-            visible: !root.settingsReady || !root.profileReady
-            text: "Loading…"
-          }
-
           Column {
             width: parent.width
-            spacing: Style.space(8)
+            spacing: Style.space(4)
+
+            PanelSectionHeader {
+              text: "Backlight"
+              foreground: root.fg
+              fontFamily: root.fontFam
+            }
+
+            SectionNote {
+              visible: !root.settingsReady || !root.profileReady
+              text: "Loading…"
+            }
 
             GlobalSliderRow {
               label: "Brightness"
@@ -1232,20 +1330,20 @@ Panel {
 
           PanelSeparator { width: parent.width; foreground: root.fg }
 
-          PanelSectionHeader {
-            text: "F-row"
-            foreground: root.fg
-            fontFamily: root.fontFam
-          }
-
-          SectionNote {
-            visible: !root.profileReady
-            text: "Loading…"
-          }
-
           Column {
             width: parent.width
-            spacing: Style.space(8)
+            spacing: Style.space(4)
+
+            PanelSectionHeader {
+              text: "F-row"
+              foreground: root.fg
+              fontFamily: root.fontFam
+            }
+
+            SectionNote {
+              visible: !root.profileReady
+              text: "Loading…"
+            }
 
             Repeater {
               model: root.fKeyList
@@ -1258,49 +1356,54 @@ Panel {
 
           PanelSeparator { width: parent.width; foreground: root.fg }
 
-          PanelSectionHeader {
-            text: "Device"
-            foreground: root.fg
-            fontFamily: root.fontFam
-          }
-
-          SectionNote {
-            visible: !root.deviceInfoReady
-            text: "Loading…"
-          }
-
           Column {
             width: parent.width
-            spacing: Style.space(8)
+            spacing: Style.space(5)
 
-            DeviceInfoRow {
-              label: "Device name"
-              valueText: (root.serverDeviceInfo && root.serverDeviceInfo.name) ? String(root.serverDeviceInfo.name) : "—"
+            PanelSectionHeader {
+              text: "Device"
+              foreground: root.fg
+              fontFamily: root.fontFam
             }
 
-            DeviceInfoRow {
-              label: "Firmware version"
-              valueText: root.serverDeviceInfo ? root.formatFwVersion(root.serverDeviceInfo.fwVersion) : "—"
-            }
-
-            DeviceInfoRow {
-              label: "Serial number"
-              valueText: (root.serverDeviceInfo && root.serverDeviceInfo.serialNumber !== undefined) ? String(root.serverDeviceInfo.serialNumber) : "—"
-            }
-
-            DeviceInfoRow {
-              label: "Bar code"
-              valueText: (root.serverDeviceInfo && root.serverDeviceInfo.barCode) ? String(root.serverDeviceInfo.barCode) : "—"
-            }
-
-            DeviceInfoRow {
-              label: "Diagnostics"
-              valueText: "Not reported"
+            SectionNote {
+              visible: !root.deviceInfoReady
+              text: "Loading…"
             }
 
             Column {
               width: parent.width
-              spacing: Style.space(6)
+              spacing: Style.space(3)
+
+              DeviceInfoRow {
+                label: "Device name"
+                valueText: (root.serverDeviceInfo && root.serverDeviceInfo.name) ? String(root.serverDeviceInfo.name) : "—"
+              }
+
+              DeviceInfoRow {
+                label: "Firmware version"
+                valueText: root.serverDeviceInfo ? root.formatFwVersion(root.serverDeviceInfo.fwVersion) : "—"
+              }
+
+              DeviceInfoRow {
+                label: "Serial number"
+                valueText: (root.serverDeviceInfo && root.serverDeviceInfo.serialNumber !== undefined) ? String(root.serverDeviceInfo.serialNumber) : "—"
+              }
+
+              DeviceInfoRow {
+                label: "Bar code"
+                valueText: (root.serverDeviceInfo && root.serverDeviceInfo.barCode) ? String(root.serverDeviceInfo.barCode) : "—"
+              }
+
+              DeviceInfoRow {
+                label: "Diagnostics"
+                valueText: "Not reported"
+              }
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(3)
               enabled: root.connected
               opacity: enabled ? 1.0 : 0.5
 
@@ -1308,31 +1411,35 @@ Panel {
                 width: parent.width
                 textFormat: Text.PlainText
                 text: "OS mode"
-                color: root.fg
+                color: root.dim
                 font.family: root.fontFam
-                font.pixelSize: Style.font.body
+                font.pixelSize: Style.font.caption
                 font.bold: true
                 elide: Text.ElideRight
               }
 
               Row {
                 width: parent.width
-                spacing: Style.space(8)
+                spacing: Style.space(4)
 
                 ButtonGroup {
+                  id: osModeGroup
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.space(4)
                   options: root.osModeOptions
                   value: root.selectedOsMode
                   foreground: root.fg
                   accent: root.accentColor
                   fontFamily: root.fontFam
-                  fontSize: Style.font.bodySmall
+                  fontSize: Style.font.caption
                   onChanged: function(v) {
                     root.selectedOsMode = v
                   }
                 }
 
                 Button {
-                  text: "Set OS mode"
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "Set"
                   bordered: true
                   focusable: true
                   enabled: root.connected
@@ -1340,7 +1447,9 @@ Panel {
                   foreground: root.fg
                   accent: root.accentColor
                   fontFamily: root.fontFam
-                  fontSize: Style.font.bodySmall
+                  fontSize: Style.font.caption
+                  horizontalPadding: Style.space(8)
+                  verticalPadding: Style.space(4)
                   onClicked: {
                     if (!root.connected || !root.service || typeof root.service.setOsMode !== "function") return
                     root.service.setOsMode(root.selectedOsMode || "LINUX")
@@ -1349,56 +1458,90 @@ Panel {
               }
             }
 
-            Button {
+            Item {
               width: parent.width
-              text: "Restart keyboard"
-              bordered: true
-              focusable: true
+              implicitHeight: Math.max(Style.spacing.controlHeight, resetConfirmSwitch.implicitHeight)
               enabled: root.connected
               opacity: enabled ? 1.0 : 0.5
-              foreground: root.fg
-              accent: root.accentColor
-              fontFamily: root.fontFam
-              fontSize: Style.font.body
-              onClicked: {
-                if (!root.connected || !root.service || typeof root.service.restartDevice !== "function") return
-                root.service.restartDevice()
+
+              Text {
+                anchors.left: parent.left
+                anchors.right: resetConfirmSwitch.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: "Confirm factory reset"
+                color: root.fg
+                font.family: root.fontFam
+                font.pixelSize: Style.font.bodySmall
+                elide: Text.ElideRight
+
+                MouseArea {
+                  anchors.fill: parent
+                  enabled: root.connected
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.factoryResetConfirmed = !root.factoryResetConfirmed
+                }
+              }
+
+              ToggleSwitch {
+                id: resetConfirmSwitch
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                trackHeight: Math.max(18, Math.round(Style.spacing.controlHeight * 0.5))
+                cursorPad: Style.space(3)
+                checked: root.factoryResetConfirmed
+                busy: !root.connected
+                interactive: root.connected
+                foreground: root.fg
+                accent: Color.urgent
+                onToggled: {
+                  if (!root.connected) return
+                  root.factoryResetConfirmed = !root.factoryResetConfirmed
+                }
               }
             }
 
-            Toggle {
+            Row {
               width: parent.width
-              label: "Confirm factory reset"
-              description: "Required before erasing device settings"
-              enabled: root.connected
-              opacity: enabled ? 1.0 : 0.5
-              foreground: root.fg
-              accent: Color.urgent
-              fontFamily: root.fontFam
-              titleSize: Style.font.body
-              checked: root.factoryResetConfirmed
-              onClicked: {
-                if (!root.connected) return
-                root.factoryResetConfirmed = !root.factoryResetConfirmed
-              }
-            }
+              spacing: Style.space(6)
 
-            Button {
-              width: parent.width
-              text: "Factory reset"
-              bordered: true
-              focusable: true
-              enabled: root.connected && root.factoryResetConfirmed
-              opacity: enabled ? 1.0 : 0.5
-              foreground: enabled ? Color.urgent : root.dim
-              accent: Color.urgent
-              fontFamily: root.fontFam
-              fontSize: Style.font.body
-              onClicked: {
-                if (!root.connected || !root.factoryResetConfirmed) return
-                if (!root.service || typeof root.service.factoryReset !== "function") return
-                root.factoryResetConfirmed = false
-                root.service.factoryReset(true)
+              Button {
+                width: Math.floor((parent.width - parent.spacing) / 2)
+                text: "Restart keyboard"
+                bordered: true
+                focusable: true
+                enabled: root.connected
+                opacity: enabled ? 1.0 : 0.5
+                foreground: root.fg
+                accent: root.accentColor
+                fontFamily: root.fontFam
+                fontSize: Style.font.bodySmall
+                verticalPadding: Style.space(5)
+                onClicked: {
+                  if (!root.connected || !root.service || typeof root.service.restartDevice !== "function") return
+                  root.service.restartDevice()
+                }
+              }
+
+              Button {
+                width: parent.width - parent.children[0].width - parent.spacing
+                text: "Factory reset"
+                bordered: true
+                focusable: true
+                enabled: root.connected && root.factoryResetConfirmed
+                opacity: enabled ? 1.0 : 0.5
+                foreground: enabled ? Color.urgent : root.dim
+                accent: Color.urgent
+                fontFamily: root.fontFam
+                fontSize: Style.font.bodySmall
+                verticalPadding: Style.space(5)
+                onClicked: {
+                  if (!root.connected || !root.factoryResetConfirmed) return
+                  if (!root.service || typeof root.service.factoryReset !== "function") return
+                  root.factoryResetConfirmed = false
+                  root.service.factoryReset(true)
+                }
               }
             }
           }
