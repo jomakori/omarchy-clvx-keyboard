@@ -24,7 +24,6 @@ Panel {
   readonly property string transport: service ? String(service.transport || "") : ""
   readonly property int batteryPercent: service ? Number(service.batteryPercent) : 0
   readonly property bool charging: service ? service.charging === true : false
-  readonly property int activeProfile: service ? Number(service.activeProfile) : 0
   readonly property string lastError: service ? String(service.lastError || "") : "CLVX service unavailable"
 
   readonly property string transportText: {
@@ -45,8 +44,14 @@ Panel {
       return root.bar.switchPanelFrom(root.barIdentity, direction)
     return false
   }
-  function chooseProfile(value) {
-    if (service && typeof service.setProfile === "function") service.setProfile(Number(value))
+
+  component SectionNote: Text {
+    width: parent ? parent.width : implicitWidth
+    textFormat: Text.PlainText
+    color: root.dim
+    font.family: root.fontFam
+    font.pixelSize: Style.font.caption
+    wrapMode: Text.WordWrap
   }
 
   KeyboardPanel {
@@ -78,28 +83,6 @@ Panel {
           fontFamily: root.fontFam
         }
 
-        PanelSeparator { width: parent.width; foreground: root.fg }
-
-        PanelSectionHeader {
-          text: "Profile"
-          foreground: root.fg
-          fontFamily: root.fontFam
-        }
-        ButtonGroup {
-          // Protocol profiles are 0-based; the labels are 1-based for humans.
-          options: [
-            { value: "0", label: "1" },
-            { value: "1", label: "2" },
-            { value: "2", label: "3" },
-            { value: "3", label: "4" }
-          ]
-          value: String(root.activeProfile)
-          foreground: root.fg
-          fontFamily: root.fontFam
-          enabled: root.connected
-          onChanged: function(value) { root.chooseProfile(value) }
-        }
-
         Text {
           width: parent.width
           visible: !root.connected && root.lastError !== ""
@@ -113,13 +96,57 @@ Panel {
 
         PanelSeparator { width: parent.width; foreground: root.fg }
 
-        Text {
-          width: parent.width
-          text: "Backlight, gestures, sliders and the F-row land in a later version."
-          color: root.dim
-          font.family: root.fontFam
-          font.pixelSize: Style.font.caption
-          wrapMode: Text.WordWrap
+        PanelSectionHeader {
+          text: "Touch"
+          foreground: root.fg
+          fontFamily: root.fontFam
+        }
+        SectionNote {
+          text: "Tap, hold, and click gesture toggles land in the next pass."
+        }
+
+        PanelSeparator { width: parent.width; foreground: root.fg }
+
+        PanelSectionHeader {
+          text: "Sliders & zones"
+          foreground: root.fg
+          fontFamily: root.fontFam
+        }
+        SectionNote {
+          text: "Left and right touch slider zone controls land in the next pass."
+        }
+
+        PanelSeparator { width: parent.width; foreground: root.fg }
+
+        PanelSectionHeader {
+          text: "Backlight"
+          foreground: root.fg
+          fontFamily: root.fontFam
+        }
+        SectionNote {
+          text: "Brightness, effect mode, and auto-dim controls land in the next pass."
+        }
+
+        PanelSeparator { width: parent.width; foreground: root.fg }
+
+        PanelSectionHeader {
+          text: "F-row"
+          foreground: root.fg
+          fontFamily: root.fontFam
+        }
+        SectionNote {
+          text: "Function row default behavior and media key controls land in the next pass."
+        }
+
+        PanelSeparator { width: parent.width; foreground: root.fg }
+
+        PanelSectionHeader {
+          text: "Device"
+          foreground: root.fg
+          fontFamily: root.fontFam
+        }
+        SectionNote {
+          text: "Linux OS mode, firmware version, and reset/restart controls land in the next pass."
         }
       }
     }

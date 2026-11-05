@@ -20,8 +20,10 @@ Item {
   readonly property int batteryPercent: state.batteryPercent
   readonly property bool charging: state.charging
   readonly property int powerMode: state.powerMode
-  readonly property int activeProfile: state.activeProfile
+  readonly property int backlightMode: state.backlightMode
+  readonly property string lastHeartbeat: state.lastHeartbeat
   readonly property string lastError: state.lastError
+  readonly property var settings: state.settings
 
   QtObject {
     id: state
@@ -30,8 +32,10 @@ Item {
     property int batteryPercent: 0
     property bool charging: false
     property int powerMode: 0
-    property int activeProfile: 0
+    property int backlightMode: 0
+    property string lastHeartbeat: ""
     property string lastError: ""
+    property var settings: null
     property int restarts: 0
     property var pendingRequest: null
     property bool requestHadStatus: false
@@ -48,7 +52,8 @@ Item {
     state.batteryPercent = Math.round(numeric(status.batteryPercent, 0))
     state.charging = status.charging === true
     state.powerMode = Math.round(numeric(status.powerMode, 0))
-    state.activeProfile = Math.round(numeric(status.activeProfile, 0))
+    state.backlightMode = Math.round(numeric(status.backlightMode, 0))
+    state.lastHeartbeat = status.lastHeartbeat === undefined || status.lastHeartbeat === null ? "" : String(status.lastHeartbeat)
     state.lastError = status.error === undefined || status.error === null ? "" : String(status.error)
   }
 
@@ -67,7 +72,12 @@ Item {
         return false
       }
       if (!message.result || typeof message.result !== "object" || Array.isArray(message.result)) return false
-      applyStatus(message.result)
+      if ("connected" in message.result || "transport" in message.result || "batteryPercent" in message.result) {
+        applyStatus(message.result)
+      }
+      if ("global" in message.result || "settings" in message.result) {
+        state.settings = message.result
+      }
       return true
     } catch (error) {
       state.lastError = "Invalid response from clvxd"
@@ -81,7 +91,8 @@ Item {
     state.batteryPercent = 0
     state.charging = false
     state.powerMode = 0
-    state.activeProfile = 0
+    state.backlightMode = 0
+    state.lastHeartbeat = ""
     state.lastError = message
   }
 
@@ -149,8 +160,11 @@ Item {
     "    s.connect(sys.argv[1])",
     "    f = s.makefile('rwb', buffering=0)",
     "    request = {'id': 1, 'method': sys.argv[2]}",
-    "    if len(sys.argv) > 3:",
-    "        request['params'] = {'profile': int(sys.argv[3])}",
+    "    if len(sys.argv) > 3 and sys.argv[3]:",
+    "        params = json.loads(sys.argv[3])",
+    "        if not isinstance(params, dict):",
+    "            raise ValueError('params must be a JSON object')",
+    "        request['params'] = params",
     "    f.write((json.dumps(request, separators=(',', ':')) + '\\n').encode())",
     "    line = f.readline()",
     "    if not line:",
@@ -177,19 +191,23 @@ Item {
   }
 
   function startRequest(request) {
+    if (!request || typeof request.method !== "string" || request.method === "") return false
     if (root.socketPath === "") {
       root.markUnavailable("XDG_RUNTIME_DIR is not set")
       return false
     }
     if (requestProcess.running) {
-      // Coalesce repeated profile changes; a refresh must not displace one.
-      if (state.pendingRequest === null || request.method === "set_profile") state.pendingRequest = request
+      // A status/get_settings poll must not displace a queued write request.
+      var incomingIsPoll = request.method === "status" || request.method === "get_settings"
+      if (state.pendingRequest === null || !incomingIsPoll) state.pendingRequest = request
       return true
     }
     state.pendingRequest = null
     state.requestHadStatus = false
     var command = ["python3", "-I", "-u", "-c", root.requestScript, root.socketPath, request.method]
-    if (request.method === "set_profile") command.push(String(request.profile))
+    if (request.params && typeof request.params === "object" && !Array.isArray(request.params)) {
+      command.push(JSON.stringify(request.params))
+    }
     requestProcess.command = command
     requestProcess.running = true
     return true
@@ -202,14 +220,25 @@ Item {
     startRequest(request)
   }
 
-  function setProfile(n) {
-    var profile = Number(n)
-    if (!isFinite(profile) || Math.floor(profile) !== profile) return false
-    return startRequest({ method: "set_profile", profile: profile })
-  }
-
   function refresh() {
     return startRequest({ method: "status" })
+  }
+
+  function getSettings() {
+    return startRequest({ method: "get_settings" })
+  }
+
+  function get_settings() {
+    return getSettings()
+  }
+
+  function setGlobal(globalParams) {
+    if (!globalParams || typeof globalParams !== "object" || Array.isArray(globalParams)) return false
+    return startRequest({ method: "set_global", params: { global: globalParams } })
+  }
+
+  function set_global(globalParams) {
+    return setGlobal(globalParams)
   }
 
   Component.onCompleted: root.connect()
