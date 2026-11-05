@@ -82,3 +82,17 @@ map) live in the reverse-engineering notes alongside `go/`.
 ## License
 
 MIT
+
+## Versioning & CI
+
+Versions are strict semver in `manifest.json` (currently 0.2.0).
+Releases are git tags: bump the manifest, commit, then
+
+```sh
+git tag v0.2.1 && git push origin master v0.2.1
+```
+
+Tagging runs the release workflow, which refuses to publish unless the
+manifest version matches the tag, then creates the GitHub Release.
+Every push runs CI: `gofmt` + `go vet` + `go test` for the daemon and
+manifest/semver validation for the plugin.
