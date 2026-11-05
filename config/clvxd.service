@@ -1,0 +1,12 @@
+[Unit]
+Description=Clevetura CLVX keyboard daemon (USB/Bluetooth heartbeat + socket API)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/clvxd --transport auto
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

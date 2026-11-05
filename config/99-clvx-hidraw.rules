@@ -1,0 +1,3 @@
+# Clevetura CLVX keyboards: vendor hidraw access over USB and Bluetooth
+ACTION=="add", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="36f7", TAG+="uaccess", MODE="0660", GROUP="plugdev"
+ACTION=="add", SUBSYSTEM=="hidraw", ENV{HID_ID}=="*:000036F7:*", TAG+="uaccess", MODE="0660", GROUP="plugdev"
