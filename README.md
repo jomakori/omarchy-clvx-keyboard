@@ -83,16 +83,18 @@ map) live in the reverse-engineering notes alongside `go/`.
 
 MIT
 
-## Versioning & CI
+## Versioning, CI & releases
 
-Versions are strict semver in `manifest.json` (currently 0.2.0).
-Releases are git tags: bump the manifest, commit, then
+Versions are strict semver in `manifest.json` (currently 0.2.0) — it is the
+single source of truth and CI fails otherwise.
 
-```sh
-git tag v0.2.1 && git push origin master v0.2.1
-```
+Releases are fully automated with Release Please (conventional commits):
 
-Tagging runs the release workflow, which refuses to publish unless the
-manifest version matches the tag, then creates the GitHub Release.
+- Write commits as `feat:`, `fix:`, `docs:`, `chore:` etc.
+- On merge to `master`, Release Please opens a "chore: release X.Y.Z" PR
+  that bumps `manifest.json`, with changelog entries grouped by type.
+- Merging the release PR creates the tag AND the GitHub Release with
+  generated notes. Never hand-tag releases.
+
 Every push runs CI: `gofmt` + `go vet` + `go test` for the daemon and
 manifest/semver validation for the plugin.
