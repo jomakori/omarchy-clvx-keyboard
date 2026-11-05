@@ -199,7 +199,16 @@ Item {
     if (requestProcess.running) {
       // A status/get_settings poll must not displace a queued write request.
       var incomingIsPoll = request.method === "status" || request.method === "get_settings"
-      if (state.pendingRequest === null || !incomingIsPoll) state.pendingRequest = request
+      if (state.pendingRequest === null || !incomingIsPoll) {
+        if (state.pendingRequest && state.pendingRequest.method === "set_global" && request.method === "set_global"
+            && state.pendingRequest.params && state.pendingRequest.params.global
+            && request.params && request.params.global) {
+          var merged = Object.assign({}, state.pendingRequest.params.global, request.params.global)
+          state.pendingRequest = { method: "set_global", params: { global: merged } }
+        } else {
+          state.pendingRequest = request
+        }
+      }
       return true
     }
     state.pendingRequest = null
