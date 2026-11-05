@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "io.github.joel.clvx-keyboard",
-  "name": "CLVX Keyboard",
+  "name": "CLVX Keyboard (Omarchy)",
   "version": "0.2.0",
   "author": "joel",
   "license": "MIT",
@@ -15,7 +15,7 @@
     "service": "Service.qml"
   },
   "barWidget": {
-    "displayName": "CLVX Keyboard",
+    "displayName": "CLVX Keyboard (Omarchy)",
     "description": "Keyboard battery and connection; click for touch, backlight, F-row and device settings",
     "category": "Input",
     "allowMultiple": false,
