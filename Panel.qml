@@ -164,11 +164,9 @@ Panel {
       }
     }
     if (!zone || typeof zone !== "object") return fallback
-    var preferTouch = !!(zoneKey && touchModeZones && touchModeZones[zoneKey] === true)
+    // Dots always reflect the base zone color; action (trace) colors are pinned.
     var src = null
-    if (preferTouch && zone.interactiveAnimation && zone.interactiveAnimation.color) {
-      src = zone.interactiveAnimation.color
-    } else if (zone.solidColor && zone.solidColor.color) {
+    if (zone.solidColor && zone.solidColor.color) {
       src = zone.solidColor.color
     } else if (zone.breathing && zone.breathing.color) {
       src = zone.breathing.color
@@ -241,15 +239,19 @@ Panel {
       if (prevZone && prevZone.interactiveAnimation && typeof prevZone.interactiveAnimation === "object") {
         next.interactiveAnimation = JSON.parse(JSON.stringify(prevZone.interactiveAnimation))
         next.interactiveAnimation.enable = true
-        if (zoneKey === "keyboard" || zoneKey === "touchpad") {
-          next.interactiveAnimation.color = col
+        // Action colors are pinned: typing trace blue, glide trace green.
+        // Never adopt the picked base color here.
+        if (!next.interactiveAnimation.color || typeof next.interactiveAnimation.color !== "object") {
+          next.interactiveAnimation.color = zoneKey === "touchpad"
+            ? { red: 0, green: 255, blue: 0 }
+            : { red: 0, green: 0, blue: 255 }
         }
       } else if (zoneKey === "leftSlider" || zoneKey === "rightSlider") {
         next.interactiveAnimation = { enable: true }
       } else if (zoneKey === "touchpad") {
-        next.interactiveAnimation = { color: col, enable: true, trace: 2 }
+        next.interactiveAnimation = { color: { red: 0, green: 255, blue: 0 }, enable: true, trace: 2 }
       } else {
-        next.interactiveAnimation = { color: col, enable: true, duration: 5 }
+        next.interactiveAnimation = { color: { red: 0, green: 0, blue: 255 }, enable: true, duration: 5 }
       }
     } else {
       next.solidColor = { color: col }
@@ -269,10 +271,7 @@ Panel {
     if (eff === "interactiveAnimation") {
       if (!next.solidColor || typeof next.solidColor !== "object") next.solidColor = { color: col }
       else next.solidColor.color = JSON.parse(JSON.stringify(col))
-      if (next.interactiveAnimation && typeof next.interactiveAnimation === "object"
-          && (zoneKey === "keyboard" || zoneKey === "touchpad")) {
-        next.interactiveAnimation.color = JSON.parse(JSON.stringify(col))
-      }
+      // Pinned action colors: typing blue, glide green — dots only set the base.
     } else if (next.solidColor && typeof next.solidColor === "object") {
       next.solidColor.color = JSON.parse(JSON.stringify(col))
     } else if (next.breathing && typeof next.breathing === "object") {
