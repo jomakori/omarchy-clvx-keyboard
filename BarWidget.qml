@@ -53,7 +53,7 @@ BarWidget {
     bar: root.bar
     text: root.connected
       ? "󰌌 " + root.batteryPercent + "%" + (root.charging ? " 󱐋" : "")
-      : "󰌌 —"
+      : "󰌌 ✕"
     dimmed: !root.connected
     active: root.opened
     useActiveColor: true
