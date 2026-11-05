@@ -24,6 +24,8 @@ Item {
   readonly property string lastHeartbeat: state.lastHeartbeat
   readonly property string lastError: state.lastError
   readonly property var settings: state.settings
+  readonly property var profile: state.profile
+  readonly property var profileRaw: state.profileRaw
 
   QtObject {
     id: state
@@ -36,6 +38,8 @@ Item {
     property string lastHeartbeat: ""
     property string lastError: ""
     property var settings: null
+    property var profile: null
+    property var profileRaw: null
     property int restarts: 0
     property var pendingRequest: null
     property bool requestHadStatus: false
@@ -77,6 +81,11 @@ Item {
       }
       if ("global" in message.result || "settings" in message.result) {
         state.settings = message.result
+      }
+      if (("id" in message.result && "raw" in message.result)
+          || (!("global" in message.result) && ("touchZone" in message.result || "keyboard" in message.result || "fKey" in message.result))) {
+        state.profile = message.result
+        if (message.result.raw !== undefined) state.profileRaw = message.result.raw
       }
       return true
     } catch (error) {
@@ -197,8 +206,8 @@ Item {
       return false
     }
     if (requestProcess.running) {
-      // A status/get_settings poll must not displace a queued write request.
-      var incomingIsPoll = request.method === "status" || request.method === "get_settings"
+      // A status/get_settings/get_profile_settings poll must not displace a queued write request.
+      var incomingIsPoll = request.method === "status" || request.method === "get_settings" || request.method === "get_profile_settings"
       if (state.pendingRequest === null || !incomingIsPoll) {
         if (state.pendingRequest && state.pendingRequest.method === "set_global" && request.method === "set_global"
             && state.pendingRequest.params && state.pendingRequest.params.global
@@ -248,6 +257,26 @@ Item {
 
   function set_global(globalParams) {
     return setGlobal(globalParams)
+  }
+
+  function getProfileSettings() {
+    return startRequest({ method: "get_profile_settings", params: { profileId: 0 } })
+  }
+
+  function get_profile_settings() {
+    return getProfileSettings()
+  }
+
+  function setProfileSettings(profileParams) {
+    if (!profileParams || typeof profileParams !== "object" || Array.isArray(profileParams)) return false
+    var payload = ("settings" in profileParams && profileParams.settings && typeof profileParams.settings === "object" && !("id" in profileParams))
+      ? profileParams
+      : { settings: profileParams }
+    return startRequest({ method: "set_profile_settings", params: payload })
+  }
+
+  function set_profile_settings(profileParams) {
+    return setProfileSettings(profileParams)
   }
 
   Component.onCompleted: root.connect()
