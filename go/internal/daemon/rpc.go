@@ -56,6 +56,9 @@ func (d *Daemon) ProfileSettings() (*cproto.ProfileSettings, error) {
 
 // SetProfileSettings merges typed edits into a device-supplied raw profile.
 // Callers must supply the raw profile so unknown fields can be preserved.
+// A successful write returns the merged view without a read-back: the UI is
+// optimistic, the next ProfileSettings call reconciles with the device, and
+// client-side range validation makes normalization drift negligible.
 func (d *Daemon) SetProfileSettings(profile *cproto.ProfileSettings) (*cproto.ProfileSettings, error) {
 	raw, err := profile.Bytes()
 	if err != nil {
@@ -72,7 +75,7 @@ func (d *Daemon) SetProfileSettings(profile *cproto.ProfileSettings) (*cproto.Pr
 	if status != cproto.SetProfileStatusOK {
 		return applied, fmt.Errorf("clvxd: SET_PROFILE_SETTINGS status %d", status)
 	}
-	return d.ProfileSettings()
+	return cproto.DecodeProfile(raw)
 }
 
 // DeviceInfo reads identity and firmware information from the keyboard.

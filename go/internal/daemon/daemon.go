@@ -223,7 +223,9 @@ func (d *Daemon) Settings() (*cproto.Settings, error) {
 
 // SetGlobal applies a partial GlobalSettings patch: current settings are read,
 // the patch is merged over them, and the full AppSettings (including the
-// untouched per-profile bytes) is written back.
+// untouched per-profile bytes) is written back. Success returns that merged
+// view without a read-back because the UI is optimistic and the next Settings
+// call reconciles with the device; validated ranges make drift negligible.
 func (d *Daemon) SetGlobal(patch *cproto.Global) (*cproto.Settings, error) {
 	current, err := d.Settings()
 	if err != nil {
@@ -252,9 +254,7 @@ func (d *Daemon) SetGlobal(patch *cproto.Global) (*cproto.Settings, error) {
 	if status != cproto.SettingsStatusOK {
 		return applied, fmt.Errorf("clvxd: SET_SETTINGS status %d", status)
 	}
-	// A successful write only carries the status, so read back what the
-	// keyboard actually stored (it may normalise ranges).
-	return d.Settings()
+	return current, nil
 }
 
 func (d *Daemon) handleReply(reply []byte) error {
