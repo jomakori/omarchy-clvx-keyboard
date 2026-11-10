@@ -49,7 +49,7 @@ Panel {
     return "#6aa8ff"
   }
   readonly property string detailText: connected
-    ? batteryPercent + "%" + (charging ? " · charging" : "")
+    ? batteryPercent + "%" + (charging ? " ⚡" : "")
     : ""
   readonly property bool showErrorLine: {
     if (!connected || lastError === "") return false
@@ -702,6 +702,11 @@ Panel {
       width: parent.width
       implicitHeight: Style.space(14)
       knobSize: Math.max(10, Math.round(Style.spacing.controlHeight * 0.28))
+      // The stock selected-fill alpha nearly disappears against a panel card,
+      // which makes the filled part read as a half-width control. Keep the
+      // full-width groove visible so the track's extent is obvious.
+      trackColor: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.24)
+      trackHeight: Math.max(6, Style.space(6))
       bar: root.bar
       minimum: 1
       maximum: 5
@@ -1209,36 +1214,89 @@ Panel {
           width: panel.viewportWidth
           spacing: Style.space(5)
 
-          Column {
+          // Hero row: title on the left, then the connection pill and the
+          // battery pill grouped on the trailing edge. One row keeps the
+          // header compact; the title elides instead of pushing the pills.
+          Item {
+            id: heroRow
             width: parent.width
-            spacing: Style.space(2)
+            implicitHeight: Math.max(titleLabel.implicitHeight,
+                                     statusPill.implicitHeight,
+                                     batteryPill.implicitHeight)
 
-            PanelHero {
-              title: "CLVX Keyboard"
-              detail: root.detailText
-              foreground: root.fg
-              fontFamily: root.fontFam
+            Text {
+              id: titleLabel
+              anchors.left: parent.left
+              anchors.right: statusPill.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: "CLVX Keyboard"
+              color: root.fg
+              font.family: root.fontFam
+              font.pixelSize: Style.font.title
+              font.bold: true
+              elide: Text.ElideRight
             }
 
-            Row {
-              anchors.horizontalCenter: parent.horizontalCenter
-              spacing: Style.space(6)
+            BorderSurface {
+              id: statusPill
+              anchors.right: batteryPill.visible ? batteryPill.left : parent.right
+              anchors.rightMargin: Style.space(6)
+              anchors.verticalCenter: parent.verticalCenter
+              implicitWidth: statusPillRow.implicitWidth + Style.space(10)
+              implicitHeight: statusPillRow.implicitHeight + Style.space(4)
+              radius: height / 2
+              color: Qt.rgba(root.connectionDotColor.r, root.connectionDotColor.g,
+                             root.connectionDotColor.b, 0.14)
+              borderSpec: Border.flat(Qt.rgba(root.connectionDotColor.r, root.connectionDotColor.g,
+                                               root.connectionDotColor.b, 0.45),
+                                      Math.max(1, Style.space(1)))
 
-              Rectangle {
-                width: Style.space(8)
-                height: Style.space(8)
-                radius: width / 2
-                anchors.verticalCenter: parent.verticalCenter
-                color: root.connectionDotColor
+              Row {
+                id: statusPillRow
+                anchors.centerIn: parent
+                spacing: Style.space(4)
+
+                Rectangle {
+                  width: Style.space(6)
+                  height: width
+                  radius: width / 2
+                  anchors.verticalCenter: parent.verticalCenter
+                  color: root.connectionDotColor
+                }
+
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: root.connectionLabel
+                  color: root.connectionDotColor
+                  font.family: root.fontFam
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
               }
+            }
+
+            BorderSurface {
+              id: batteryPill
+              visible: root.detailText !== ""
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              implicitWidth: batteryText.implicitWidth + Style.space(10)
+              implicitHeight: batteryText.implicitHeight + Style.space(4)
+              color: "transparent"
+              borderSpec: Border.controlSpec("normal", root.fg, root.accentColor)
+              radius: Style.cornerRadius
 
               Text {
-                anchors.verticalCenter: parent.verticalCenter
+                id: batteryText
+                anchors.centerIn: parent
                 textFormat: Text.PlainText
-                text: root.connectionLabel
-                color: root.connectionDotColor
+                text: root.detailText
+                color: root.dim
                 font.family: root.fontFam
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.body
                 font.bold: true
               }
             }
