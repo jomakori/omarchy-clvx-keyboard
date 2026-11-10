@@ -573,8 +573,8 @@ Panel {
       id: innerBtn
       iconText: "󰑐"
       iconSize: Style.font.iconSmall
-      horizontalPadding: Style.space(5)
-      verticalPadding: Style.space(3)
+      horizontalPadding: Style.space(4)
+      verticalPadding: Style.space(2)
       foreground: rbtn.canReset ? root.dim : Qt.darker(root.dim, 1.4)
       accent: root.accentColor
       fontFamily: root.fontFam
@@ -600,38 +600,27 @@ Panel {
 
   component CompactButtonGroup: ButtonGroup {
     id: cbg
-    property real chipPaddingX: Style.space(4)
-    property real chipPaddingY: Style.space(3)
-    spacing: Style.space(3)
+    property real chipPaddingX: Style.space(3)
+    property real chipPaddingY: Style.space(2)
+    spacing: Style.space(2)
     foreground: root.fg
     accent: root.accentColor
     fontFamily: root.fontFam
-    fontSize: Style.font.caption
+    fontSize: Math.max(9, Style.font.caption - 1)
 
     function tightenChips() {
-      var buttons = []
       for (var i = 0; i < cbg.children.length; i++) {
         var child = cbg.children[i]
         if (child && child.horizontalPadding !== undefined) {
           child.horizontalPadding = cbg.chipPaddingX
           child.verticalPadding = cbg.chipPaddingY
           child.fontSize = cbg.fontSize
-          buttons.push(child)
-        }
-      }
-      if (cbg.width > 0 && buttons.length > 0 && cbg.implicitWidth > cbg.width) {
-        var shrunkFont = Math.max(8, cbg.fontSize - 1)
-        var shrunkPadX = Math.max(Style.space(2), cbg.chipPaddingX - Style.space(1))
-        for (var j = 0; j < buttons.length; j++) {
-          buttons[j].fontSize = shrunkFont
-          buttons[j].horizontalPadding = shrunkPadX
         }
       }
     }
 
     Component.onCompleted: tightenChips()
     onOptionsChanged: Qt.callLater(tightenChips)
-    onWidthChanged: Qt.callLater(tightenChips)
     onChipPaddingXChanged: tightenChips()
     onChipPaddingYChanged: tightenChips()
   }
@@ -643,7 +632,7 @@ Panel {
     readonly property int sensValue: root.sliderSensitivity(side, 3)
     readonly property string behaviorValue: root.sliderBehavior(side, "")
     width: parent ? parent.width : implicitWidth
-    spacing: Style.space(4)
+    spacing: Style.space(2)
     enabled: root.profileControlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
@@ -690,8 +679,8 @@ Panel {
     PanelSlider {
       id: sensSlider
       width: parent.width
-      implicitHeight: Style.space(18)
-      knobSize: Math.max(12, Math.round(Style.spacing.controlHeight * 0.32))
+      implicitHeight: Style.space(14)
+      knobSize: Math.max(10, Math.round(Style.spacing.controlHeight * 0.28))
       bar: root.bar
       minimum: 1
       maximum: 5
@@ -718,7 +707,7 @@ Panel {
     CompactButtonGroup {
       id: behGroup
       width: parent.width
-      chipPaddingX: Style.space(4)
+      chipPaddingX: Style.space(3)
       options: root.sliderBehaviorOptions
       value: szc.behaviorValue
       onChanged: function(v) {
@@ -872,36 +861,36 @@ Panel {
     readonly property bool isColorDotEffect: effectValue === "solidColor" || effectValue === "breathing"
 
     width: parent ? parent.width : implicitWidth
-    spacing: Style.space(6)
+    spacing: Style.space(4)
     enabled: root.profileControlsEnabled
     opacity: enabled ? 1.0 : 0.5
 
-    // Top-view keyboard illustration: wide rounded body, left/right slider strips
-    // on top, keyboard deck with live wash below, and centered touchpad rectangle.
+    // Compact top-view keyboard illustration: left/right slider strips on top,
+    // halved-height keyboard deck below (3x10 keycap grid dropped), centered touchpad.
     BorderSurface {
       id: keyboardBody
       width: parent.width
-      implicitHeight: mapColumn.implicitHeight + Style.space(14)
-      padding: Style.space(7)
-      radius: Math.max(Style.space(8), Style.cornerRadius)
+      implicitHeight: mapColumn.implicitHeight + Style.space(8)
+      padding: Style.space(4)
+      radius: Math.max(Style.space(6), Style.cornerRadius)
       color: Style.normalFillFor(root.fg, root.accentColor)
       borderSpec: Border.flat(Style.normalBorderFor(root.fg, root.accentColor), Math.max(1, Style.normalBorderWidth))
 
       Column {
         id: mapColumn
-        x: Style.space(7)
-        y: Style.space(7)
-        width: parent.width - Style.space(14)
-        spacing: Style.space(5)
+        x: Style.space(4)
+        y: Style.space(4)
+        width: parent.width - Style.space(8)
+        spacing: Style.space(3)
 
         // Top row: Left & Right touch slider strips above the keyboard area
         Row {
           width: parent.width
-          spacing: Style.space(6)
+          spacing: Style.space(4)
 
           ZoneMapBlock {
             width: Math.floor((parent.width - parent.spacing) / 2)
-            height: Style.space(22)
+            height: Style.space(18)
             radius: Math.max(Style.space(4), Math.round(Style.cornerRadius * 0.6))
             zoneKey: "leftSlider"
             labelText: "Left Slider"
@@ -910,7 +899,7 @@ Panel {
 
           ZoneMapBlock {
             width: parent.width - Math.floor((parent.width - parent.spacing) / 2) - parent.spacing
-            height: Style.space(22)
+            height: Style.space(18)
             radius: Math.max(Style.space(4), Math.round(Style.cornerRadius * 0.6))
             zoneKey: "rightSlider"
             labelText: "Right Slider"
@@ -918,60 +907,27 @@ Panel {
           }
         }
 
-        // Main keyboard deck with subtle keycap grid and centered touchpad overlay
+        // Compact keyboard deck with centered touchpad overlay
         ZoneMapBlock {
           id: keyboardDeck
           width: parent.width
-          height: Style.space(76)
-          radius: Math.max(Style.space(6), Math.round(Style.cornerRadius * 0.8))
+          height: Style.space(40)
+          radius: Math.max(Style.space(5), Math.round(Style.cornerRadius * 0.8))
           zoneKey: "keyboard"
           labelText: "Keyboard"
           subText: "Background"
           labelAlignment: Qt.AlignTop
-          labelTopMargin: Style.space(6)
+          labelTopMargin: Style.space(3)
           isHot: mouseHovered && !touchpadZone.mouseHovered
-
-          // Faint keycap grid texture across the keyboard deck
-          Column {
-            anchors.fill: parent
-            anchors.leftMargin: Style.space(6)
-            anchors.rightMargin: Style.space(6)
-            anchors.topMargin: Style.space(24)
-            anchors.bottomMargin: Style.space(6)
-            spacing: Style.space(3)
-            z: 1
-
-            Repeater {
-              model: 3
-              delegate: Row {
-                width: parent.width
-                height: Style.space(12)
-                spacing: Style.space(3)
-                readonly property int keyCount: 10
-
-                Repeater {
-                  model: parent.keyCount
-                  delegate: Rectangle {
-                    width: Math.max(Style.space(8), Math.floor((parent.width - (parent.keyCount - 1) * parent.spacing) / parent.keyCount))
-                    height: parent.height
-                    radius: Style.space(2)
-                    color: "transparent"
-                    border.width: 1
-                    border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.10)
-                  }
-                }
-              }
-            }
-          }
 
           // Centered touchpad zone sitting inside the keyboard deck
           ZoneMapBlock {
             id: touchpadZone
             width: Math.round(parent.width * 0.64)
-            height: Style.space(40)
+            height: Style.space(19)
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: Style.space(6)
+            anchors.bottomMargin: Style.space(3)
             radius: Math.max(Style.space(4), Math.round(Style.cornerRadius * 0.6))
             zoneKey: "touchpad"
             labelText: "Touchpad"
@@ -982,7 +938,7 @@ Panel {
       }
     }
 
-    // Selected zone header + per-zone factory subtree reset
+    // Single-line selected zone header + per-zone factory subtree reset
     Item {
       width: parent.width
       implicitHeight: Math.max(zoneHeaderLabel.implicitHeight, zoneResetBtn.implicitHeight)
@@ -1011,90 +967,98 @@ Panel {
       }
     }
 
-    Text {
+    // Single-line color header + preset swatches
+    Item {
       width: parent.width
-      textFormat: Text.PlainText
-      text: "Color"
-      color: root.dim
-      font.family: root.fontFam
-      font.pixelSize: Style.font.caption
-      font.bold: true
-      elide: Text.ElideRight
-    }
+      implicitHeight: Math.max(colorHeaderText.implicitHeight, swatchRow.implicitHeight)
 
-    Row {
-      id: swatchRow
-      width: parent.width
-      spacing: Style.space(6)
+      Text {
+        id: colorHeaderText
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "Color"
+        color: root.dim
+        font.family: root.fontFam
+        font.pixelSize: Style.font.caption
+        font.bold: true
+      }
 
-      Repeater {
-        model: root.backlightColorPresets
-        delegate: Item {
-          required property var modelData
-          readonly property bool isSelected: bzc.redValue === modelData.red
-            && bzc.greenValue === modelData.green
-            && bzc.blueValue === modelData.blue
-          readonly property color swatchColor: Qt.rgba(
-            modelData.red / 255,
-            modelData.green / 255,
-            modelData.blue / 255,
-            1.0
-          )
-          width: Style.space(22)
-          height: Style.space(22)
+      Row {
+        id: swatchRow
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(4)
 
-          Rectangle {
-            anchors.fill: parent
-            radius: width / 2
-            color: "transparent"
-            border.width: parent.isSelected
-              ? Math.max(2, Style.space(2))
-              : (swatchMouse.containsMouse ? Math.max(1, Style.space(1)) : 0)
-            border.color: parent.isSelected ? root.accentColor : root.dim
+        Repeater {
+          model: root.backlightColorPresets
+          delegate: Item {
+            required property var modelData
+            readonly property bool isSelected: bzc.redValue === modelData.red
+              && bzc.greenValue === modelData.green
+              && bzc.blueValue === modelData.blue
+            readonly property color swatchColor: Qt.rgba(
+              modelData.red / 255,
+              modelData.green / 255,
+              modelData.blue / 255,
+              1.0
+            )
+            width: Style.space(18)
+            height: Style.space(18)
 
             Rectangle {
-              anchors.centerIn: parent
-              width: parent.parent.isSelected ? parent.width - Style.space(6) : parent.width - Style.space(4)
-              height: width
+              anchors.fill: parent
               radius: width / 2
-              color: parent.parent.swatchColor
-              border.width: 1
-              border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
-              scale: swatchMouse.containsMouse && bzc.enabled ? 1.12 : 1.0
+              color: "transparent"
+              border.width: parent.isSelected
+                ? Math.max(2, Style.space(2))
+                : (swatchMouse.containsMouse ? Math.max(1, Style.space(1)) : 0)
+              border.color: parent.isSelected ? root.accentColor : root.dim
 
-              Behavior on scale {
-                NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+              Rectangle {
+                anchors.centerIn: parent
+                width: parent.parent.isSelected ? parent.width - Style.space(5) : parent.width - Style.space(3)
+                height: width
+                radius: width / 2
+                color: parent.parent.swatchColor
+                border.width: 1
+                border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
+                scale: swatchMouse.containsMouse && bzc.enabled ? 1.12 : 1.0
+
+                Behavior on scale {
+                  NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                }
               }
             }
-          }
 
-          MouseArea {
-            id: swatchMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            enabled: bzc.enabled
-            cursorShape: bzc.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-              if (!bzc.enabled) return
-              root.setProfileField("backlight." + bzc.zoneKey + ".color", {
-                red: modelData.red,
-                green: modelData.green,
-                blue: modelData.blue
-              })
-              root.flushProfile()
+            MouseArea {
+              id: swatchMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              enabled: bzc.enabled
+              cursorShape: bzc.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+              onClicked: {
+                if (!bzc.enabled) return
+                root.setProfileField("backlight." + bzc.zoneKey + ".color", {
+                  red: modelData.red,
+                  green: modelData.green,
+                  blue: modelData.blue
+                })
+                root.flushProfile()
+              }
             }
-          }
 
-          PanelToolTip {
-            visible: swatchMouse.containsMouse
-            text: modelData.label
-            fontFamily: root.fontFam
+            PanelToolTip {
+              visible: swatchMouse.containsMouse
+              text: modelData.label
+              fontFamily: root.fontFam
+            }
           }
         }
       }
     }
 
-    // Effect header + live indicator ("Live on keyboard")
+    // Single-line Effect header + live indicator ("Live on keyboard")
     Item {
       width: parent.width
       implicitHeight: Math.max(effectHeaderText.implicitHeight, liveIndicatorRow.implicitHeight)
@@ -1120,8 +1084,8 @@ Panel {
         Rectangle {
           id: livePreviewDot
           visible: bzc.isColorDotEffect
-          width: Style.space(8)
-          height: Style.space(8)
+          width: Style.space(7)
+          height: Style.space(7)
           radius: width / 2
           anchors.verticalCenter: parent.verticalCenter
           color: bzc.activeColor
@@ -1169,7 +1133,7 @@ Panel {
     CompactButtonGroup {
       id: zoneEffectGroup
       width: parent.width
-      chipPaddingX: Style.space(4)
+      chipPaddingX: Style.space(3)
       options: root.effectOptionsForZone(bzc.zoneKey)
       value: bzc.effectValue
       onChanged: function(v) {
@@ -1187,34 +1151,42 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
+    padding: Style.space(10)
     contentWidth: panel.fittedContentWidth(Style.space(300))
-    contentHeight: panel.fittedContentHeight(
-      column.implicitHeight,
-      panel.screenH > 0 ? Math.min(Style.space(520), Math.round(panel.screenH * 0.7)) : Style.space(520)
-    )
+
+    readonly property int horizontalContentInset: panel.padding * 2 + Border.left(panel.borderSpec) + Border.right(panel.borderSpec)
+    readonly property int viewportWidth: Math.max(1, panel.contentWidth - panel.horizontalContentInset)
+    readonly property int maxCardHeight: panel.screenH > 0
+      ? Math.min(Style.space(420), Math.round(panel.screenH * 0.6))
+      : Style.space(420)
+
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, panel.maxCardHeight)
+    readonly property int viewportHeight: Math.max(1, panel.contentHeight - panel.verticalContentInset)
 
     PanelKeyCatcher {
       id: keyCatcher
-      anchors.fill: parent
+      width: panel.viewportWidth
+      height: panel.viewportHeight
+      clip: true
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       ScrollView {
         id: scrollArea
-        anchors.fill: parent
+        x: 0
+        y: 0
+        width: panel.viewportWidth
+        height: panel.viewportHeight
+        contentWidth: panel.viewportWidth
+        contentHeight: column.implicitHeight
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-        ScrollBar.vertical.policy: column.implicitHeight > height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-        Binding {
-          target: scrollArea.contentItem
-          property: "interactive"
-          value: column.implicitHeight > scrollArea.height
-        }
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
         Column {
           id: column
-          width: scrollArea.availableWidth
-          spacing: Style.space(8)
+          width: panel.viewportWidth
+          spacing: Style.space(5)
 
           PanelHero {
             title: "CLVX Keyboard"
@@ -1239,17 +1211,32 @@ Panel {
 
           Column {
             width: parent.width
-            spacing: Style.space(6)
+            spacing: Style.space(4)
 
-            PanelSectionHeader {
-              text: "Sliders"
-              foreground: root.fg
-              fontFamily: root.fontFam
-            }
+            Item {
+              width: parent.width
+              implicitHeight: slidersHeader.implicitHeight
 
-            SectionNote {
-              visible: !root.profileReady
-              text: "Loading…"
+              PanelSectionHeader {
+                id: slidersHeader
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                topPadding: 0
+                text: "Sliders"
+                foreground: root.fg
+                fontFamily: root.fontFam
+              }
+
+              Text {
+                visible: !root.profileReady
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: "Loading…"
+                color: root.dim
+                font.family: root.fontFam
+                font.pixelSize: Style.font.caption
+              }
             }
 
             SliderZoneControl {
@@ -1267,17 +1254,32 @@ Panel {
 
           Column {
             width: parent.width
-            spacing: Style.space(6)
+            spacing: Style.space(4)
 
-            PanelSectionHeader {
-              text: "Backlight"
-              foreground: root.fg
-              fontFamily: root.fontFam
-            }
+            Item {
+              width: parent.width
+              implicitHeight: backlightHeader.implicitHeight
 
-            SectionNote {
-              visible: !root.profileReady
-              text: "Loading…"
+              PanelSectionHeader {
+                id: backlightHeader
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                topPadding: 0
+                text: "Backlight"
+                foreground: root.fg
+                fontFamily: root.fontFam
+              }
+
+              Text {
+                visible: !root.profileReady
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: "Loading…"
+                color: root.dim
+                font.family: root.fontFam
+                font.pixelSize: Style.font.caption
+              }
             }
 
             BacklightZoneControl {}
