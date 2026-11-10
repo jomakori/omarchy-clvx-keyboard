@@ -40,7 +40,14 @@ Panel {
     if (t.indexOf("usb") === 0) return "USB"
     return "Connected"
   }
-  readonly property color connectionDotColor: connected ? "#7fb069" : root.dim
+  // Pill colors: blue = Bluetooth, green = USB, orange = disconnected.
+  // Other errors stay red via the Color.urgent error line below.
+  readonly property color connectionDotColor: {
+    if (!connected) return "#d9903f"
+    var t = transport.toLowerCase()
+    if (t.indexOf("usb") === 0) return "#7fb069"
+    return "#6aa8ff"
+  }
   readonly property string detailText: connected
     ? batteryPercent + "%" + (charging ? " · charging" : "")
     : ""
@@ -1229,7 +1236,7 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 textFormat: Text.PlainText
                 text: root.connectionLabel
-                color: root.connected ? root.fg : root.dim
+                color: root.connectionDotColor
                 font.family: root.fontFam
                 font.pixelSize: Style.font.caption
                 font.bold: true
