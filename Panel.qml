@@ -33,13 +33,27 @@ Panel {
   readonly property var serverDefaults: (service && service.deviceDefaults) ? service.deviceDefaults : null
   readonly property bool defaultsReady: serverDefaults !== null
 
-  readonly property string transportText: {
-    if (!connected) return "Disconnected"
-    return transport === "" ? "Connected" : transport.toUpperCase()
+  readonly property string connectionLabel: {
+    if (!connected) return "Not connected"
+    var t = transport.toLowerCase()
+    if (t.indexOf("ble") === 0) return "Bluetooth"
+    if (t.indexOf("usb") === 0) return "USB"
+    return "Connected"
   }
+  readonly property color connectionDotColor: connected ? "#7fb069" : root.dim
   readonly property string detailText: connected
     ? batteryPercent + "%" + (charging ? " · charging" : "")
     : ""
+  readonly property bool showErrorLine: {
+    if (!connected || lastError === "") return false
+    var low = lastError.toLowerCase()
+    if (low.indexOf("unavailable") >= 0
+        || low.indexOf("not connected") >= 0
+        || low.indexOf("disconnected") >= 0) {
+      return false
+    }
+    return true
+  }
 
   // Profile optimistic local state + coalesced pending writes (set_profile_settings)
   property var localProfile: null
@@ -706,7 +720,7 @@ Panel {
 
     CompactButtonGroup {
       id: behGroup
-      width: parent.width
+      anchors.horizontalCenter: parent.horizontalCenter
       chipPaddingX: Style.space(3)
       options: root.sliderBehaviorOptions
       value: szc.behaviorValue
@@ -1132,7 +1146,7 @@ Panel {
 
     CompactButtonGroup {
       id: zoneEffectGroup
-      width: parent.width
+      anchors.horizontalCenter: parent.horizontalCenter
       chipPaddingX: Style.space(3)
       options: root.effectOptionsForZone(bzc.zoneKey)
       value: bzc.effectValue
@@ -1188,20 +1202,47 @@ Panel {
           width: panel.viewportWidth
           spacing: Style.space(5)
 
-          PanelHero {
-            title: "CLVX Keyboard"
-            meta: root.transportText
-            detail: root.detailText
-            foreground: root.fg
-            fontFamily: root.fontFam
+          Column {
+            width: parent.width
+            spacing: Style.space(2)
+
+            PanelHero {
+              title: "CLVX Keyboard"
+              detail: root.detailText
+              foreground: root.fg
+              fontFamily: root.fontFam
+            }
+
+            Row {
+              anchors.horizontalCenter: parent.horizontalCenter
+              spacing: Style.space(6)
+
+              Rectangle {
+                width: Style.space(8)
+                height: Style.space(8)
+                radius: width / 2
+                anchors.verticalCenter: parent.verticalCenter
+                color: root.connectionDotColor
+              }
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: root.connectionLabel
+                color: root.connected ? root.fg : root.dim
+                font.family: root.fontFam
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+            }
           }
 
           Text {
             width: parent.width
-            visible: root.lastError !== ""
+            visible: root.showErrorLine
             text: root.lastError
             textFormat: Text.PlainText
-            color: !root.connected ? root.dim : Color.urgent
+            color: Color.urgent
             font.family: root.fontFam
             font.pixelSize: Style.font.caption
             wrapMode: Text.WordWrap
@@ -1219,7 +1260,7 @@ Panel {
 
               PanelSectionHeader {
                 id: slidersHeader
-                anchors.left: parent.left
+                anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
                 topPadding: 0
                 text: "Sliders"
@@ -1262,7 +1303,7 @@ Panel {
 
               PanelSectionHeader {
                 id: backlightHeader
-                anchors.left: parent.left
+                anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
                 topPadding: 0
                 text: "Backlight"
