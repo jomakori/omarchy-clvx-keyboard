@@ -1178,32 +1178,29 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     padding: Style.space(10)
+
     contentWidth: panel.fittedContentWidth(Style.space(300))
 
-    readonly property int horizontalContentInset: panel.padding * 2 + Border.left(panel.borderSpec) + Border.right(panel.borderSpec)
-    readonly property int viewportWidth: Math.max(1, panel.contentWidth - panel.horizontalContentInset)
     readonly property int maxCardHeight: panel.screenH > 0
       ? Math.min(Style.space(420), Math.round(panel.screenH * 0.6))
       : Style.space(420)
 
     contentHeight: panel.fittedContentHeight(column.implicitHeight, panel.maxCardHeight)
-    readonly property int viewportHeight: Math.max(1, panel.contentHeight - panel.verticalContentInset)
 
+    // Same shape as the shipped panels: the content fills the host's content
+    // area and takes its width from the ScrollView's available width, instead
+    // of re-deriving the inner size by hand.
     PanelKeyCatcher {
       id: keyCatcher
-      width: panel.viewportWidth
-      height: panel.viewportHeight
+      anchors.fill: parent
       clip: true
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       ScrollView {
         id: scrollArea
-        x: 0
-        y: 0
-        width: panel.viewportWidth
-        height: panel.viewportHeight
-        contentWidth: panel.viewportWidth
+        anchors.fill: parent
+        contentWidth: availableWidth
         contentHeight: column.implicitHeight
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -1211,7 +1208,7 @@ Panel {
 
         Column {
           id: column
-          width: panel.viewportWidth
+          width: scrollArea.availableWidth
           spacing: Style.space(5)
 
           // Hero row: title on the left, then the connection pill and the
