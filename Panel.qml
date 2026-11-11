@@ -1170,6 +1170,32 @@ Panel {
     }
   }
 
+  // The host sizes the card from a morph animation between popups. When that
+  // animation is cut short the card keeps a blended rect (wider than
+  // contentWidth) and stops tracking contentWidth, so the content ends up
+  // pinned to the left of an over-wide card with a wide empty band on its
+  // right. Re-assert the final rect once the panel has settled, so the card
+  // always matches the content it holds.
+  readonly property Item hostCard: {
+    var it = keyCatcher ? keyCatcher.parent : null
+    while (it) {
+      if (it.borderSpec !== undefined && it.radius !== undefined) return it
+      it = it.parent
+    }
+    return null
+  }
+  Timer {
+    interval: 260
+    running: root.opened
+    repeat: false
+    onTriggered: {
+      if (!hostCard) return
+      hostCard.x = panel.cardOrigin.x
+      hostCard.width = panel.contentWidth
+      if (panel.cardOrigin.y > 0) hostCard.y = panel.cardOrigin.y
+    }
+  }
+
   KeyboardPanel {
     id: panel
     anchorItem: root.anchorItem
